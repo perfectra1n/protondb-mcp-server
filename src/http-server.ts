@@ -39,7 +39,18 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse): Promise<voi
       // DNS-rebinding protection guards browser-based localhost attacks. Enable
       // it when bound to loopback; when bound to 0.0.0.0 (e.g. in a container
       // behind its own network controls) it would block legitimate access.
+      // An explicit PROTONDB_MCP_HTTP_ALLOWED_HOSTS always takes precedence.
       const loopback = config.httpHost === "127.0.0.1" || config.httpHost === "localhost";
+      const allowedHosts =
+        config.httpAllowedHosts ??
+        (loopback
+          ? [
+              "localhost",
+              `localhost:${config.httpPort}`,
+              "127.0.0.1",
+              `127.0.0.1:${config.httpPort}`,
+            ]
+          : undefined);
       transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => randomUUID(),
         onsessioninitialized: (id) => {
@@ -48,15 +59,8 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse): Promise<voi
         onsessionclosed: (id) => {
           transports.delete(id);
         },
-        enableDnsRebindingProtection: loopback,
-        allowedHosts: loopback
-          ? [
-              "localhost",
-              `localhost:${config.httpPort}`,
-              "127.0.0.1",
-              `127.0.0.1:${config.httpPort}`,
-            ]
-          : undefined,
+        enableDnsRebindingProtection: allowedHosts !== undefined,
+        allowedHosts,
       });
       transport.onclose = () => {
         if (transport!.sessionId) transports.delete(transport!.sessionId);
@@ -93,7 +97,7 @@ async function main(): Promise<void> {
       res.end(JSON.stringify({ status: "ok" }));
       return;
     }
-    if (path === "/mcp") {
+    if (path === config.httpPath) {
       handleMcp(req, res).catch((err) => {
         log("request error:", (err as Error).message);
         if (!res.headersSent) res.writeHead(500).end();
@@ -105,7 +109,9 @@ async function main(): Promise<void> {
   });
 
   httpServer.listen(config.httpPort, config.httpHost, () => {
-    log(`ProtonDB MCP HTTP server on http://${config.httpHost}:${config.httpPort}/mcp`);
+    log(
+      `ProtonDB MCP HTTP server on http://${config.httpHost}:${config.httpPort}${config.httpPath}`,
+    );
   });
 
   const shutdown = async () => {

@@ -22,7 +22,13 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * `timeout` option), and exponential backoff retries on transient failures.
  */
 export async function httpFetch(url: string, opts: FetchOptions = {}): Promise<Response> {
-  const { method = "GET", headers = {}, body, timeoutMs = 15_000, retries = 2 } = opts;
+  const {
+    method = "GET",
+    headers = {},
+    body,
+    timeoutMs = config.fetchTimeoutMs,
+    retries = config.fetchRetries,
+  } = opts;
   let lastErr: unknown;
 
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -64,7 +70,9 @@ export async function fetchJson<T>(
   url: string,
   opts: FetchOptions & { cacheTtlMs?: number } = {},
 ): Promise<T> {
-  const { cacheTtlMs = 0, ...fetchOpts } = opts;
+  const { cacheTtlMs: requestedTtl = 0, ...fetchOpts } = opts;
+  // A global override (PROTONDB_MCP_CACHE_TTL_MS) wins when set; 0 disables cache.
+  const cacheTtlMs = config.cacheTtlOverrideMs !== null ? config.cacheTtlOverrideMs : requestedTtl;
   const key = `${fetchOpts.method ?? "GET"} ${url} ${fetchOpts.body ?? ""}`;
   const now = Date.now();
   if (cacheTtlMs > 0) {

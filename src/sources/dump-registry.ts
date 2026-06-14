@@ -39,7 +39,7 @@ export function parseDumpName(name: string, url: string): DumpInfo | null {
 export async function listDumps(): Promise<DumpInfo[]> {
   const url = `https://api.github.com/repos/${config.dumpRepo}/contents/reports`;
   const headers: Record<string, string> = { Accept: "application/vnd.github+json" };
-  if (process.env.GITHUB_TOKEN) headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
+  if (config.githubToken) headers.Authorization = `Bearer ${config.githubToken}`;
   const items = await fetchJson<GhContentItem[]>(url, {
     headers,
     cacheTtlMs: 60 * 60_000,
@@ -50,7 +50,7 @@ export async function listDumps(): Promise<DumpInfo[]> {
       parseDumpName(
         it.name,
         it.download_url ??
-          `https://github.com/${config.dumpRepo}/raw/master/reports/${it.name}`,
+          `https://github.com/${config.dumpRepo}/raw/${config.dumpBranch}/reports/${it.name}`,
       ),
     )
     .filter((d): d is DumpInfo => d !== null)

@@ -68,11 +68,11 @@ export async function fetchLiveReports(appId: string, limit = 40): Promise<Repor
   try {
     const responsePromise = page.waitForResponse(
       (r) => r.url().includes("/data/reports/all-devices/app/") && r.url().endsWith(".json"),
-      { timeout: 25_000 },
+      { timeout: config.liveTimeoutMs },
     );
     await page.goto(`https://www.protondb.com/app/${encodeURIComponent(appId)}`, {
       waitUntil: "commit",
-      timeout: 25_000,
+      timeout: config.liveTimeoutMs,
     });
     const response = await responsePromise;
     const payload = (await response.json()) as { reports?: unknown[] };

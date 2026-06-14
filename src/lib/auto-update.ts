@@ -121,7 +121,8 @@ export function startAutoUpdate(): void {
     return;
   }
   void runAutoUpdate();
-  timer = setInterval(() => void runAutoUpdate(), 24 * 60 * 60 * 1000);
+  const intervalMs = Math.max(1, config.updateIntervalHours) * 60 * 60 * 1000;
+  timer = setInterval(() => void runAutoUpdate(), intervalMs);
   timer.unref();
 }
 
