@@ -27,9 +27,16 @@ free-text notes) so a model can mine them for "what config works best".
 | `get_game_details` | Steam store details (genres, native-Linux, release) + current ProtonDB tier. |
 | `get_reports` | Individual reports for a game with server-side filters (`source: db \| live \| auto`). |
 | `analyze_compatibility` | Aggregate reports into patterns: verdict split, best Proton versions, GPU/distro breakdown, sample notes. **Start here.** |
-| `search_report_notes` | Full-text search across report notes (e.g. `anti-cheat`, `crash`). |
+| `search_reports` | General keyword/full-text search across all reports — notes, title, Proton version, GPU and OS (e.g. `nixos`, `anti-cheat`, `6800 xt`, `GE-Proton9`). Global or scoped to one game; result-limited. |
 
 All tools return a concise human summary plus validated `structuredContent`.
+
+The server also ships **instructions** (an MCP "system prompt") that tell the
+assistant to first detect the user's Linux environment — distro/base (Fedora,
+Arch, NixOS, SteamOS/Bazzite, Ubuntu, …), package manager, kernel, GPU + driver,
+session (Wayland/X11), and how Steam/Proton are installed — and then filter and
+interpret reports accordingly (e.g. NixOS FHS/steam-run, Flatpak Steam sandboxing,
+atomic-distro driver constraints, NVIDIA vs Mesa). Clients surface these to the model.
 
 ## Quick start (local)
 

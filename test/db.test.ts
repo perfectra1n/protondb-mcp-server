@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDb, makeInserter, setMeta, getMeta, type DB } from "../src/db/schema.js";
-import { getReports, searchNotes, countReports, totalReports } from "../src/db/queries.js";
+import { getReports, searchReports, countReports, totalReports } from "../src/db/queries.js";
 import { ingestToDb } from "../src/scripts/ingest.js";
 import { normalizeReport } from "../src/lib/normalize.js";
 import type { Report } from "../src/lib/types.js";
@@ -76,12 +76,24 @@ describe("db schema + queries", () => {
     insert(rep({ notes: "Crashes on launch with vulkan error" }));
     insert(rep({ appId: "42", title: "Other", notes: "anti-cheat blocks linux" }));
 
-    const hits = searchNotes(db, "anti-cheat");
+    const hits = searchReports(db, "anti-cheat");
     expect(hits.length).toBe(2);
 
-    const scoped = searchNotes(db, "anti-cheat", { appId: "42" });
+    const scoped = searchReports(db, "anti-cheat", { appId: "42" });
     expect(scoped.length).toBe(1);
     expect(scoped[0]!.appId).toBe("42");
+  });
+
+  it("general search matches hardware / OS / proton fields, not just notes", () => {
+    const insert = makeInserter(db);
+    insert(rep({ notes: "fine", os: "NixOS 24.05", gpu: "AMD RX 6800 XT", protonVersion: "GE-Proton9-1" }));
+    insert(rep({ notes: "fine", os: "Ubuntu 24.04", gpu: "NVIDIA RTX 4080", protonVersion: "Experimental" }));
+
+    expect(searchReports(db, "nixos").length).toBe(1);
+    expect(searchReports(db, "6800").length).toBe(1);
+    expect(searchReports(db, "GE-Proton9").length).toBe(1);
+    // empty/garbage query returns nothing rather than throwing
+    expect(searchReports(db, "   ").length).toBe(0);
   });
 
   it("stores and reads meta", () => {
@@ -137,7 +149,7 @@ describe("ingestToDb (integration, local JSON fixture)", () => {
     try {
       expect(totalReports(ndb)).toBe(2);
       expect(getMeta(ndb, "record_count")).toBe("2");
-      const hits = searchNotes(ndb, "black screen");
+      const hits = searchReports(ndb, "black screen");
       expect(hits.length).toBe(1);
     } finally {
       ndb.close();

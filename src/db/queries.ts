@@ -64,8 +64,12 @@ export function toFtsQuery(input: string): string | null {
   return tokens.map((t) => `"${t}"`).join(" ");
 }
 
-/** Full-text search over report notes (and titles), optionally scoped to an app. */
-export function searchNotes(
+/**
+ * General full-text keyword search across reports — matches notes, title, Proton
+ * version, GPU, and OS. Optionally scoped to a single app. Returns up to `limit`
+ * reports (hard-capped) ranked by relevance.
+ */
+export function searchReports(
   db: DB,
   query: string,
   opts: { appId?: string; limit?: number } = {},

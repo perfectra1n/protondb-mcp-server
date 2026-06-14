@@ -43,7 +43,8 @@ export function applySchema(db: DB): void {
     CREATE INDEX IF NOT EXISTS idx_reports_app_ts ON reports(app_id, timestamp);
 
     CREATE VIRTUAL TABLE IF NOT EXISTS reports_fts USING fts5(
-      notes, title, app_id UNINDEXED, content='reports', content_rowid='id'
+      notes, title, proton_version, gpu, os,
+      app_id UNINDEXED, content='reports', content_rowid='id'
     );
 
     CREATE TABLE IF NOT EXISTS meta (
@@ -111,7 +112,8 @@ export function makeInserter(db: DB): (rep: Report) => void {
        @cpu, @gpu, @gpu_driver, @kernel, @os, @ram, @playtime_min, @source)
   `);
   const insertFts = db.prepare(
-    `INSERT INTO reports_fts(rowid, notes, title, app_id) VALUES (?, ?, ?, ?)`,
+    `INSERT INTO reports_fts(rowid, notes, title, proton_version, gpu, os, app_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
   );
   return (rep: Report) => {
     const info = insert.run({
@@ -132,7 +134,15 @@ export function makeInserter(db: DB): (rep: Report) => void {
       playtime_min: rep.playtimeMinutes,
       source: rep.source,
     });
-    insertFts.run(info.lastInsertRowid, rep.notes ?? "", rep.title ?? "", rep.appId);
+    insertFts.run(
+      info.lastInsertRowid,
+      rep.notes ?? "",
+      rep.title ?? "",
+      rep.protonVersion ?? "",
+      rep.gpu ?? "",
+      rep.os ?? "",
+      rep.appId,
+    );
   };
 }
 

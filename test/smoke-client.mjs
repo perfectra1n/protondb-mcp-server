@@ -11,6 +11,7 @@ const transport = new StdioClientTransport({
 const client = new Client({ name: "smoke", version: "1.0.0" });
 await client.connect(transport);
 
+console.log("INSTRUCTIONS present:", Boolean(client.getInstructions?.()));
 const tools = await client.listTools();
 console.log("TOOLS:", tools.tools.map((t) => t.name).join(", "));
 
@@ -32,8 +33,8 @@ console.log("  -> structured count:", r.structuredContent?.count, "source:", r.s
 // analyze_compatibility (DB + live summary)
 const a = await call("analyze_compatibility", { appId: "1091500" });
 console.log("  -> workingRate:", a.structuredContent?.workingRate, "bestProton:", a.structuredContent?.bestProtonVersions?.[0]?.key);
-// search_report_notes (FTS over ingested notes)
-await call("search_report_notes", { query: "crash", limit: 5 });
+// search_reports (general keyword search across notes/title/proton/gpu/os)
+await call("search_reports", { query: "crash", limit: 5 });
 // error path: unknown game name
 await call("get_reports", { name: "asdkjfhqwoeiuzzz nonexistent game", source: "db" });
 
