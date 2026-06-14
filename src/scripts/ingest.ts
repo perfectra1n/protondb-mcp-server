@@ -132,6 +132,9 @@ export async function ingestToDb(
     if (dumpDate) setMeta(db, "dump_date", dumpDate);
     setMeta(db, "record_count", String(count));
     setMeta(db, "ingested_at", new Date().toISOString());
+    // Fold the WAL back into the main file so the DB is a single self-contained
+    // file that can be atomically renamed into place (see auto-update swap).
+    db.pragma("wal_checkpoint(TRUNCATE)");
     log(`ingested ${count} reports from ${dumpFile}`);
     return { recordCount: count, dumpFile, dumpDate };
   } finally {

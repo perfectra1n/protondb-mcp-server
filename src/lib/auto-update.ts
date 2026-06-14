@@ -1,6 +1,5 @@
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { mkdtempSync, rmSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { config } from "./config.js";
 import { log } from "./http.js";
 import { getDb, swapDb } from "../db/store.js";
@@ -93,10 +92,17 @@ export async function runAutoUpdate(now: Date = new Date()): Promise<boolean> {
     log("auto-update decision:", JSON.stringify(decision));
     if (!decision.update || !latest) return false;
 
-    const workDir = mkdtempSync(join(tmpdir(), "protondb-swap-"));
+    // Build the new DB on the SAME filesystem as the live DB so the atomic
+    // rename in swapDb() works (a cross-device rename, e.g. /tmp -> a mounted
+    // volume, fails with EXDEV).
+    const workDir = mkdtempSync(join(dirname(config.dbPath), ".swap-"));
     const tmpDb = join(workDir, "protondb.db");
-    await ingestToDb({ dumpName: latest.name }, tmpDb);
-    swapDb(tmpDb);
+    try {
+      await ingestToDb({ dumpName: latest.name }, tmpDb);
+      swapDb(tmpDb);
+    } finally {
+      rmSync(workDir, { recursive: true, force: true });
+    }
     return true;
   } catch (err) {
     log("auto-update error:", (err as Error).message);

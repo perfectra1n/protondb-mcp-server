@@ -50,8 +50,37 @@ Then map findings to the tools:
   (paths/launchers differ); atomic distros (Silverblue/Bazzite/SteamOS) constrain which
   drivers/Proton builds are available; NVIDIA vs AMD/Intel (Mesa) behavior differs a lot.
 
+TROUBLESHOOTING — common commands and fixes (when a game won't run or runs poorly).
+Many report notes reference these; suggest them adapted to the user's <appId> and distro:
+- Steam launch options (right-click game > Properties > Launch Options, "%command%"):
+    PROTON_LOG=1 %command%       -> writes ~/steam-<appid>.log for debugging
+    gamemoderun %command%        -> CPU/GPU governor tuning (needs gamemode)
+    mangohud %command%           -> perf overlay; DXVK_HUD=fps,gpuload for DXVK stats
+    PROTON_USE_WINED3D=1 %command%   -> fall back from DXVK if Vulkan is broken
+- Pick/force a Proton or GE-Proton build: Properties > Compatibility; GE builds live in
+    ~/.steam/root/compatibilitytools.d or ~/.local/share/Steam/compatibilitytools.d
+- Reset a broken prefix: delete the per-game compatdata, then relaunch:
+    rm -rf ~/.steam/steam/steamapps/compatdata/<appid>   (Flatpak: ~/.var/app/com.valvesoftware.Steam/.local/share/Steam/...)
+- Verify game files: Properties > Installed Files > Verify integrity of game files
+- protontricks (often Flatpak) for winetricks verbs/components:
+    protontricks <appid> --gui ; protontricks <appid> vcrun2019 dotnet48
+- Vulkan / driver health (32-bit libs are required for most games):
+    vulkaninfo | grep -i deviceName ; vkcube ; glxinfo -B | grep -iE 'renderer|version'
+    nvidia-smi ; inxi -G ; check Mesa / lib32-* / 32-bit vulkan driver packages
+- Anti-cheat: confirm EAC/BattlEye Linux support (areweanticheatyet.com) and enable the
+    Proton EAC/BattlEye runtime; many "borked" reports are anti-cheat, not Proton.
+- Shaders/stutter: enable Steam shader pre-caching; try a newer Proton-GE; RADV_PERFTEST,
+    mesa_glthread=true (AMD/Intel), or DXVK async builds.
+- Flatpak Steam sandbox: grant access if a drive/launcher isn't visible, e.g.
+    flatpak override --user com.valvesoftware.Steam --filesystem=/mnt/games
+- NixOS: programs.steam.enable = true; hardware.graphics.enable = true; run non-Steam
+    binaries via "steam-run ./game"; use extraPkgs/FHS for missing libraries.
+- When a game won't start, check logs: journalctl --user -b -e ; dmesg | tail ;
+    PROTON_LOG, and "ldd" on the binary for missing libraries.
+
 Typical flow: search_games (name -> appId) -> analyze_compatibility -> get_reports /
-search_reports filtered to the user's hardware and distro.
+search_reports filtered to the user's hardware and distro -> recommend the launch
+options / Proton version / fixes that recurring reports show working on similar setups.
 `.trim();
 
 /** Build a fully-configured ProtonDB MCP server (no transport attached). */
