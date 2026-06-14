@@ -4,6 +4,7 @@
   "description": "MCP server for fetching and analyzing ProtonDB Linux/Proton game compatibility reports",
   "license": "MIT",
   "type": "module",
+  "packageManager": "pnpm@11.6.0",
   "bin": {
     "protondb-mcp": "dist/index.js"
   },
