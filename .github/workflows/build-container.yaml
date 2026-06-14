@@ -1,0 +1,82 @@
+---
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: Build Container
+
+# Reusable: called by release-please and the monthly CalVer workflow. Also
+# runnable manually. Builds and pushes images to GHCR.
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Image version tag (without leading v)
+        required: true
+        type: string
+      push:
+        description: Whether to push to GHCR
+        default: true
+        type: boolean
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Image version tag (without leading v)
+        default: dev
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    name: Build and push images
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Compute image name (lowercase)
+        id: img
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/protondb-mcp" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: ${{ inputs.push }}
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Default image (DB-only, slim): :<version> and :latest
+      - name: Build & push default image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: ${{ inputs.push }}
+          tags: |
+            ${{ steps.img.outputs.image }}:${{ inputs.version }}
+            ${{ steps.img.outputs.image }}:latest
+          labels: org.opencontainers.image.version=${{ inputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Full image (bundles Chromium for live capture): :<version>-playwright and :playwright
+      - name: Build & push playwright image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.playwright
+          platforms: linux/amd64
+          push: ${{ inputs.push }}
+          tags: |
+            ${{ steps.img.outputs.image }}:${{ inputs.version }}-playwright
+            ${{ steps.img.outputs.image }}:playwright
+          labels: org.opencontainers.image.version=${{ inputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

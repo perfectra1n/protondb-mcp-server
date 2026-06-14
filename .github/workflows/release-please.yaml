@@ -1,0 +1,44 @@
+---
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: Release Please
+
+# Commit-driven (conventional commits) CalVer releases between the monthly cuts.
+# Uses always-bump-patch so only the MICRO of YYYY.M.MICRO moves.
+on:
+  push:
+    branches:
+      - main
+
+permissions: {}
+
+jobs:
+  release-please:
+    name: Release Please
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      released: ${{ steps.release.outputs.release_created }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - name: Run release-please
+        id: release
+        uses: googleapis/release-please-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  # Build the container in the SAME run when a release was created, so we don't
+  # depend on GITHUB_TOKEN-created tags triggering a separate workflow.
+  container:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.released == 'true' }}
+    uses: ./.github/workflows/build-container.yaml
+    with:
+      version: ${{ needs.release-please.outputs.version }}
+    permissions:
+      contents: read
+      packages: write
+    secrets: inherit

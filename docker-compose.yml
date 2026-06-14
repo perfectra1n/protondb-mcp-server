@@ -1,0 +1,30 @@
+services:
+  protondb-mcp:
+    build:
+      context: .
+      # Use Dockerfile.playwright instead for live headless capture support.
+      dockerfile: Dockerfile
+    image: protondb-mcp:latest
+    ports:
+      - "3000:3000"
+    environment:
+      PROTONDB_MCP_HTTP_HOST: 0.0.0.0
+      PROTONDB_MCP_HTTP_PORT: "3000"
+      PROTONDB_MCP_AUTO_UPDATE: "true"
+      # Set to "true" only when using Dockerfile.playwright (Chromium present).
+      PROTONDB_MCP_ENABLE_LIVE: "false"
+      # Optional: raises GitHub API rate limits for dump listing.
+      # GITHUB_TOKEN: ${GITHUB_TOKEN}
+    volumes:
+      # Persist the ingested SQLite DB so the dump is not re-downloaded on restart.
+      - protondb-data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  protondb-data:

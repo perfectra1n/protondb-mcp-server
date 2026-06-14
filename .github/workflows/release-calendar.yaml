@@ -1,0 +1,81 @@
+---
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: Monthly CalVer Release
+
+# Always cut a CalVer release (YYYY.M.0) and container on the 2nd of every month,
+# regardless of commit activity. This complements release-please (which handles
+# in-month MICRO bumps). The 2nd is chosen so the freshly-published monthly
+# ProtonDB data dump is already available for the image's first auto-ingest.
+on:
+  schedule:
+    - cron: "0 12 2 * *" # 12:00 UTC on the 2nd of every month
+  workflow_dispatch: {}
+
+permissions: {}
+
+jobs:
+  calver-release:
+    name: Cut CalVer release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.calver.outputs.version }}
+      released: ${{ steps.calver.outputs.released }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute CalVer version
+        id: calver
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          VERSION="$(date -u +'%Y.%-m.0')"
+          TAG="v${VERSION}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          if git rev-parse "${TAG}" >/dev/null 2>&1; then
+            echo "Tag ${TAG} already exists; skipping release."
+            echo "released=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "released=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Bump version, tag, and release
+        if: ${{ steps.calver.outputs.released == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.calver.outputs.version }}
+          TAG: ${{ steps.calver.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Keep package.json and the release-please manifest in step so
+          # release-please continues from this CalVer baseline for the new month.
+          npm pkg set version="${VERSION}"
+          printf '{\n  ".": "%s"\n}\n' "${VERSION}" > .release-please-manifest.json
+          git add package.json .release-please-manifest.json
+          git commit -m "chore(release): ${VERSION}"
+          git tag "${TAG}"
+          git push origin HEAD:main
+          git push origin "${TAG}"
+          gh release create "${TAG}" \
+            --title "${VERSION}" \
+            --generate-notes \
+            --latest
+
+  container:
+    needs: calver-release
+    if: ${{ needs.calver-release.outputs.released == 'true' }}
+    uses: ./.github/workflows/build-container.yaml
+    with:
+      version: ${{ needs.calver-release.outputs.version }}
+    permissions:
+      contents: read
+      packages: write
+    secrets: inherit

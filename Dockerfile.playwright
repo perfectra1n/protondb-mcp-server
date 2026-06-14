@@ -1,0 +1,31 @@
+# Full image: includes Chromium for live headless report capture
+# (PROTONDB_MCP_ENABLE_LIVE=true). Larger than the default Dockerfile.
+# The base image version MUST match the installed `playwright` npm version.
+# ---- builder ----
+FROM mcr.microsoft.com/playwright:v1.60.0-noble AS builder
+WORKDIR /app
+RUN corepack enable
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
+COPY tsconfig.json ./
+COPY src ./src
+RUN pnpm build
+RUN pnpm prune --prod
+
+# ---- runtime ----
+FROM mcr.microsoft.com/playwright:v1.60.0-noble AS runtime
+WORKDIR /app
+ENV NODE_ENV=production \
+    PROTONDB_MCP_DB=/app/data/protondb.db \
+    PROTONDB_MCP_HTTP_HOST=0.0.0.0 \
+    PROTONDB_MCP_HTTP_PORT=3000 \
+    PROTONDB_MCP_ENABLE_LIVE=true \
+    PROTONDB_MCP_AUTO_UPDATE=true
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/dist ./dist
+COPY package.json ./
+RUN mkdir -p /app/data && chown -R pwuser:pwuser /app
+USER pwuser
+VOLUME ["/app/data"]
+EXPOSE 3000
+CMD ["node", "dist/http-server.js"]
