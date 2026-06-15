@@ -38,10 +38,12 @@ export function registerSearchReports(server: McpServer): void {
     {
       title: "Search reports",
       description:
-        "General keyword/full-text search across the ingested ProtonDB reports — " +
-        "matches notes, title, Proton version, GPU and OS. Use it globally to find " +
-        "environment-specific reports (e.g. 'nixos', 'silverblue', 'anti-cheat', a " +
-        "GPU model, or a Proton version), or scope to one game with appId/name.",
+        "General keyword/full-text search across the ingested ProtonDB reports — matches " +
+        "notes (all categories), title, Proton version, GPU, OS and launch options. Use it " +
+        "globally to find environment-specific reports (e.g. 'nixos', 'silverblue', " +
+        "'anti-cheat', 'gamemoderun', a GPU model, or a Proton version), or scope to one " +
+        "game with appId/name. Each result carries the full report fields (responses, " +
+        "systemInfo, device/contributor) like get_reports.",
       inputSchema,
       outputSchema,
     },

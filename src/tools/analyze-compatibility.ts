@@ -69,8 +69,10 @@ export function registerAnalyzeCompatibility(server: McpServer): void {
       title: "Analyze compatibility",
       description:
         "Aggregate a game's individual ProtonDB reports into compatibility patterns: " +
-        "verdict breakdown, which Proton versions tend to work, GPU-vendor and distro " +
-        "splits, and representative notes. The best starting point for 'what works best'.",
+        "verdict breakdown, working rate, best Proton versions (among working reports), " +
+        "bestLaunchOptions (launch flags working reports used), antiCheatReports (count), " +
+        "GPU-vendor and distro splits, and representative notes. The best starting point " +
+        "for 'what works best' and 'what launch flags should I use'.",
       inputSchema,
       outputSchema,
     },

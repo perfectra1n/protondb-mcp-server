@@ -40,9 +40,27 @@ what fails) and note the results:
 - Steam install:        command -v steam ; flatpak list 2>/dev/null | grep -i steam
 - Proton-GE present:    ls ~/.steam/root/compatibilitytools.d ~/.local/share/Steam/compatibilitytools.d 2>/dev/null
 
+WHAT EACH REPORT CONTAINS. get_reports and search_reports return rich, lossless records —
+use these fields, don't assume only a tier/verdict:
+- Flat/indexed: verdict, works, protonVersion, launcher, launchOptions (the actual Steam
+  launch flags the user ran, e.g. "gamemoderun %command%"), antiCheat, gpu, cpu, os,
+  kernel, ram, timestamp, notes (all free-text note categories combined).
+- responses: the FULL questionnaire — every fault (audio/graphical/performance/stability/
+  input/windowing/saveGame), installs/opens/startsPlay, frameRate, batteryPerformance,
+  verdictOob/triedOob, type/variant, multiplayer appraisals, per-category notes, etc.
+- systemInfo: cpu, gpu, gpuDriver, kernel, os, ram, steamRuntimeVersion, xWindowManager.
+- device/contributor: present on live reports (hardwareType, playtime, …).
+- includeRaw:true on get_reports adds the byte-for-byte original record.
+analyze_compatibility aggregates these into: verdict breakdown, working rate, best Proton
+versions among working reports, bestLaunchOptions (flags that working reports used),
+antiCheatReports (count), and GPU-vendor/distro splits — start here for "what works/flags".
+
 Then map findings to the tools:
 - Filter get_reports by gpuContains (their GPU vendor/model) and protonVersionContains
   (a Proton/GE version they can actually install).
+- The launchOptions field + analyze_compatibility.bestLaunchOptions are the direct answer
+  to "what launch flags should I use" — prefer flags that recur in working reports on
+  similar hardware/distro.
 - Use search_reports for environment-specific gotchas, e.g. "nixos", "flatpak",
   "wayland", "silverblue", "steam deck", "anti-cheat", "gamescope".
 - Prefer analyze_compatibility for a quick overview, then drill in with get_reports.

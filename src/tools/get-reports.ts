@@ -79,9 +79,13 @@ export function registerGetReports(server: McpServer): void {
     {
       title: "Get reports",
       description:
-        "Fetch individual community ProtonDB reports for a game so you can read the " +
-        "raw notes, Proton versions, hardware and verdicts. Supports server-side " +
-        "filtering. Use analyze_compatibility first for an aggregated overview.",
+        "Fetch individual community ProtonDB reports for a game. Each report is rich and " +
+        "lossless: flat fields (verdict, works, protonVersion, launcher, launchOptions, " +
+        "antiCheat, gpu/cpu/os/kernel/ram, notes) PLUS the full `responses` object (all " +
+        "faults, installs/opens/startsPlay, frameRate, verdictOob, type/variant, " +
+        "per-category notes), full `systemInfo` (incl. steamRuntimeVersion, xWindowManager), " +
+        "and device/contributor when present. Supports server-side filtering; set " +
+        "includeRaw=true for the verbatim original. Use analyze_compatibility first for an overview.",
       inputSchema,
       outputSchema,
     },
