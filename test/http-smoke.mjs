@@ -25,9 +25,12 @@ const r = await call("get_reports", { appId: "1091500", source: "db", limit: 3, 
 console.log("  -> count:", r.structuredContent?.count, "source:", r.structuredContent?.source);
 const a = await call("analyze_compatibility", { appId: "1091500" });
 console.log(
-  "  -> analyzed:", a.structuredContent?.totalReports,
-  "workingRate:", a.structuredContent?.workingRate,
-  "bestProton:", a.structuredContent?.bestProtonVersions?.[0]?.key,
+  "  -> analyzed:",
+  a.structuredContent?.totalReports,
+  "workingRate:",
+  a.structuredContent?.workingRate,
+  "bestProton:",
+  a.structuredContent?.bestProtonVersions?.[0]?.key,
 );
 // General keyword search across notes/proton/gpu/os
 const s = await call("search_reports", { query: "nixos", limit: 5 });

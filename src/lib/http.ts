@@ -1,9 +1,5 @@
+import type { ZodType } from "zod";
 import { config } from "./config.js";
-
-/** Log to stderr only — stdout is reserved for MCP JSON-RPC over stdio. */
-export function log(...args: unknown[]): void {
-  console.error("[protondb-mcp]", ...args);
-}
 
 export interface FetchOptions {
   method?: string;
@@ -63,14 +59,34 @@ interface CacheEntry {
   value: unknown;
   expires: number;
 }
+// Insertion-ordered map: the oldest entry is always first, so we evict from the
+// front once the cap is reached. Keeps a long-running server's memory bounded.
 const cache = new Map<string, CacheEntry>();
 
-/** Fetch JSON with a small in-memory TTL cache keyed by url + options. */
-export async function fetchJson<T>(
-  url: string,
-  opts: FetchOptions & { cacheTtlMs?: number } = {},
-): Promise<T> {
-  const { cacheTtlMs: requestedTtl = 0, ...fetchOpts } = opts;
+function cacheSet(key: string, entry: CacheEntry): void {
+  // Refresh recency: delete-then-set moves the key to the end of the map.
+  cache.delete(key);
+  cache.set(key, entry);
+  while (cache.size > config.httpCacheMaxEntries) {
+    const oldest = cache.keys().next().value;
+    if (oldest === undefined) break;
+    cache.delete(oldest);
+  }
+}
+
+export type FetchJsonOptions<T> = FetchOptions & {
+  cacheTtlMs?: number;
+  /** When provided, the response is validated/parsed instead of blindly cast. */
+  schema?: ZodType<T>;
+};
+
+/**
+ * Fetch JSON with a small bounded in-memory TTL cache keyed by url + options.
+ * Pass a Zod `schema` to validate the response shape at runtime (recommended
+ * for external APIs) rather than trusting an unchecked `as T` cast.
+ */
+export async function fetchJson<T>(url: string, opts: FetchJsonOptions<T> = {}): Promise<T> {
+  const { cacheTtlMs: requestedTtl = 0, schema, ...fetchOpts } = opts;
   // A global override (PROTONDB_MCP_CACHE_TTL_MS) wins when set; 0 disables cache.
   const cacheTtlMs = config.cacheTtlOverrideMs !== null ? config.cacheTtlOverrideMs : requestedTtl;
   const key = `${fetchOpts.method ?? "GET"} ${url} ${fetchOpts.body ?? ""}`;
@@ -78,13 +94,15 @@ export async function fetchJson<T>(
   if (cacheTtlMs > 0) {
     const hit = cache.get(key);
     if (hit && hit.expires > now) return hit.value as T;
+    if (hit) cache.delete(key); // drop expired entry
   }
   const res = await httpFetch(url, fetchOpts);
   if (!res.ok) {
     throw new Error(`HTTP ${res.status} ${res.statusText} for ${url}`);
   }
-  const value = (await res.json()) as T;
-  if (cacheTtlMs > 0) cache.set(key, { value, expires: now + cacheTtlMs });
+  const json = await res.json();
+  const value = schema ? schema.parse(json) : (json as T);
+  if (cacheTtlMs > 0) cacheSet(key, { value, expires: now + cacheTtlMs });
   return value;
 }
 

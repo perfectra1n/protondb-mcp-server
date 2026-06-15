@@ -1,5 +1,6 @@
 import { config } from "../lib/config.js";
-import { log } from "../lib/http.js";
+import { logger } from "../lib/logger.js";
+import { errMessage } from "../lib/coerce.js";
 import { normalizeReport } from "../lib/normalize.js";
 import type { Report } from "../lib/types.js";
 
@@ -35,7 +36,7 @@ async function getBrowser(): Promise<{
         return await chromium.launch({ headless: true, args: ["--no-sandbox"] });
       } catch (err) {
         throw new LiveUnavailableError(
-          `Failed to launch Chromium (${(err as Error).message}). Install browser ` +
+          `Failed to launch Chromium (${errMessage(err)}). Install browser ` +
             "binaries with `pnpm exec playwright install --with-deps chromium`.",
         );
       }
@@ -100,8 +101,8 @@ export async function tryFetchLiveReports(
   try {
     return { reports: await fetchLiveReports(appId, limit) };
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    log("live capture failed (continuing):", message);
+    const message = errMessage(err);
+    logger.warn("live capture failed (continuing):", message);
     return { reports: [], error: message };
   }
 }
@@ -113,7 +114,7 @@ export async function closeBrowser(): Promise<void> {
     const browser = (await browserPromise) as { close?: () => Promise<void> };
     await browser.close?.();
   } catch (err) {
-    log("error closing browser:", (err as Error).message);
+    logger.warn("error closing browser:", errMessage(err));
   } finally {
     browserPromise = null;
   }

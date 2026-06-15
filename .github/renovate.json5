@@ -1,9 +1,7 @@
 {
   $schema: "https://docs.renovatebot.com/renovate-schema.json",
   // Use the community "home-operations" shareable Renovate config.
-  extends: [
-    "github>home-operations/renovate-config",
-  ],
+  extends: ["github>home-operations/renovate-config"],
   timezone: "America/New_York",
   // Assign/review on the maintainer.
   assignees: ["perfectra1n"],

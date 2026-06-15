@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { searchGames } from "./resolve.js";
+import { textResult, errorResult } from "./result.js";
 
 const inputSchema = z.object({
   query: z.string().min(1).describe("Game name to search for (e.g. 'Cyberpunk 2077')"),
@@ -45,10 +46,7 @@ export function registerSearchGames(server: McpServer): void {
     async ({ query, limit }) => {
       const games = await searchGames(query, limit);
       if (games.length === 0) {
-        return {
-          content: [{ type: "text", text: `No games found matching "${query}".` }],
-          isError: true,
-        };
+        return errorResult(`No games found matching "${query}".`);
       }
       const structured = {
         count: games.length,
@@ -66,12 +64,7 @@ export function registerSearchGames(server: McpServer): void {
       const lines = games
         .map((g) => `- ${g.name} (appId ${g.appId}${g.releaseYear ? `, ${g.releaseYear}` : ""})`)
         .join("\n");
-      return {
-        content: [
-          { type: "text", text: `Found ${games.length} game(s):\n${lines}` },
-        ],
-        structuredContent: structured,
-      };
+      return textResult(`Found ${games.length} game(s):\n${lines}`, structured);
     },
   );
 }

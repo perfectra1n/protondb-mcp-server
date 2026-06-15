@@ -12,10 +12,7 @@ export const ReportSchema = z.object({
     .boolean()
     .nullable()
     .describe("Whether the reporter said the game worked (verdict 'yes')"),
-  verdict: z
-    .string()
-    .nullable()
-    .describe("Raw per-report verdict ('yes'/'no') as submitted"),
+  verdict: z.string().nullable().describe("Raw per-report verdict ('yes'/'no') as submitted"),
   notes: z
     .string()
     .nullable()
@@ -33,10 +30,7 @@ export const ReportSchema = z.object({
     .boolean()
     .nullable()
     .describe("Whether the reporter said the game is impacted by anti-cheat"),
-  timestamp: z
-    .number()
-    .nullable()
-    .describe("Unix epoch seconds when the report was submitted"),
+  timestamp: z.number().nullable().describe("Unix epoch seconds when the report was submitted"),
   cpu: z.string().nullable().describe("Reporter CPU (bulk dump only)"),
   gpu: z.string().nullable().describe("Reporter GPU (bulk dump only)"),
   gpuDriver: z.string().nullable().describe("Reporter GPU driver (bulk dump only)"),
@@ -61,7 +55,9 @@ export const ReportSchema = z.object({
   systemInfo: z
     .record(z.string(), z.unknown())
     .nullable()
-    .describe("Full hardware/software info: cpu, gpu, gpuDriver, kernel, os, ram, steamRuntimeVersion, xWindowManager"),
+    .describe(
+      "Full hardware/software info: cpu, gpu, gpuDriver, kernel, os, ram, steamRuntimeVersion, xWindowManager",
+    ),
   device: z
     .record(z.string(), z.unknown())
     .nullable()

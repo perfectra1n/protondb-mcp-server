@@ -29,10 +29,20 @@ await call("search_games", { query: "Cyberpunk 2077", limit: 3 });
 await call("get_game_details", { appId: "1091500" });
 // get_reports from the ingested DB (appId present in the 2020 dump)
 const r = await call("get_reports", { appId: "1091500", source: "db", limit: 5 });
-console.log("  -> structured count:", r.structuredContent?.count, "source:", r.structuredContent?.source);
+console.log(
+  "  -> structured count:",
+  r.structuredContent?.count,
+  "source:",
+  r.structuredContent?.source,
+);
 // analyze_compatibility (DB + live summary)
 const a = await call("analyze_compatibility", { appId: "1091500" });
-console.log("  -> workingRate:", a.structuredContent?.workingRate, "bestProton:", a.structuredContent?.bestProtonVersions?.[0]?.key);
+console.log(
+  "  -> workingRate:",
+  a.structuredContent?.workingRate,
+  "bestProton:",
+  a.structuredContent?.bestProtonVersions?.[0]?.key,
+);
 // search_reports (general keyword search across notes/title/proton/gpu/os)
 await call("search_reports", { query: "crash", limit: 5 });
 // error path: unknown game name

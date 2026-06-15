@@ -13,7 +13,5 @@ export const TIER_MEANINGS: Record<Tier, string> = {
 
 /** A compact glossary string suitable for embedding in a tool response. */
 export function tierGlossary(): string {
-  return (Object.keys(TIER_MEANINGS) as Tier[])
-    .map((t) => `${t}: ${TIER_MEANINGS[t]}`)
-    .join("\n");
+  return (Object.keys(TIER_MEANINGS) as Tier[]).map((t) => `${t}: ${TIER_MEANINGS[t]}`).join("\n");
 }

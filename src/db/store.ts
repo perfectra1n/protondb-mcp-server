@@ -1,6 +1,6 @@
 import { existsSync, renameSync, rmSync } from "node:fs";
 import { config } from "../lib/config.js";
-import { log } from "../lib/http.js";
+import { log } from "../lib/logger.js";
 import { openDb, type DB } from "./schema.js";
 import { totalReports } from "./queries.js";
 

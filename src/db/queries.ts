@@ -19,9 +19,9 @@ export interface ReportFilters {
 
 /** Number of reports stored for a given appId. */
 export function countReports(db: DB, appId: string): number {
-  const row = db
-    .prepare(`SELECT COUNT(*) AS n FROM reports WHERE app_id = ?`)
-    .get(appId) as { n: number };
+  const row = db.prepare(`SELECT COUNT(*) AS n FROM reports WHERE app_id = ?`).get(appId) as {
+    n: number;
+  };
   return row.n;
 }
 

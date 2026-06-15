@@ -1,22 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { toNumber } from "../src/sources/algolia.js";
 import { GameHitSchema } from "../src/tools/search-games.js";
-
-describe("toNumber (Algolia field coercion)", () => {
-  it("passes through finite numbers", () => {
-    expect(toNumber(94)).toBe(94);
-    expect(toNumber(85.46)).toBe(85.46);
-  });
-  it("parses numeric strings", () => {
-    expect(toNumber("2026")).toBe(2026);
-  });
-  it("drops null / non-numeric strings / undefined", () => {
-    expect(toNumber(null)).toBeUndefined();
-    expect(toNumber("Soon")).toBeUndefined();
-    expect(toNumber(undefined)).toBeUndefined();
-    expect(toNumber("")).toBeUndefined();
-  });
-});
 
 describe("GameHitSchema tolerance", () => {
   it("accepts the well-formed case", () => {

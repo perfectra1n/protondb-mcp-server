@@ -5,8 +5,8 @@ import { getReports, countReports } from "../db/queries.js";
 import { tryFetchLiveReports } from "../sources/protondb-live.js";
 import { getSummary } from "../sources/summary.js";
 import { analyzeReports } from "../lib/analyze.js";
-import { resolveAppId } from "./resolve.js";
-import { log } from "../lib/http.js";
+import { withResolvedAppId, textResult, errorResult } from "./result.js";
+import { logger } from "../lib/logger.js";
 import type { Report } from "../lib/types.js";
 
 const inputSchema = z.object({
@@ -76,59 +76,54 @@ export function registerAnalyzeCompatibility(server: McpServer): void {
       inputSchema,
       outputSchema,
     },
-    async (args) => {
-      let resolved;
-      try {
-        resolved = await resolveAppId(args);
-      } catch (err) {
-        return { content: [{ type: "text", text: (err as Error).message }], isError: true };
-      }
-      const { appId, name } = resolved;
-      const db = getDb();
+    async (args) =>
+      withResolvedAppId(args, async ({ appId, name }) => {
+        const db = getDb();
 
-      let reports: Report[] = getReports(db, { appId, limit: args.sampleSize });
-      if (args.includeLive) {
-        // Live capture is best-effort: on any failure we log and continue with
-        // the DB-only analysis rather than failing the call.
-        const { reports: live, error } = await tryFetchLiveReports(appId, 40);
-        if (error) log("includeLive failed, continuing with DB only:", error);
-        if (live.length > 0) reports = [...reports, ...live];
-      }
+        let reports: Report[] = getReports(db, { appId, limit: args.sampleSize });
+        if (args.includeLive) {
+          // Live capture is best-effort: on any failure we log and continue with
+          // the DB-only analysis rather than failing the call.
+          const { reports: live, error } = await tryFetchLiveReports(appId, 40);
+          if (error) logger.warn("includeLive failed, continuing with DB only:", error);
+          if (live.length > 0) reports = [...reports, ...live];
+        }
 
-      const summary = await getSummary(appId);
+        const summary = await getSummary(appId);
 
-      if (reports.length === 0 && !summary) {
-        return {
-          content: [
-            {
-              type: "text",
-              text:
-                `No reports found for appId ${appId}${name ? ` (${name})` : ""}. The local DB may ` +
-                `not be ingested yet — try get_reports with source:"live", or run ingestion.`,
-            },
-          ],
-          isError: true,
-        };
-      }
+        if (reports.length === 0 && !summary) {
+          return errorResult(
+            `No reports found for appId ${appId}${name ? ` (${name})` : ""}. The local DB may ` +
+              `not be ingested yet — try get_reports with source:"live", or run ingestion.`,
+          );
+        }
 
-      const analysis = analyzeReports(appId, reports, summary);
-      if (name && !analysis.title) analysis.title = name;
+        const analysis = analyzeReports(appId, reports, summary);
+        if (name && !analysis.title) analysis.title = name;
 
-      const dbTotal = countReports(db, appId);
-      const pct = analysis.workingRate === null ? "?" : `${Math.round(analysis.workingRate * 100)}%`;
-      const text =
-        `${analysis.title ?? appId} — ProtonDB tier: ${summary?.tier ?? "unknown"}` +
-        `${summary?.total ? ` (${summary.total} total reports)` : ""}\n` +
-        `Analyzed ${analysis.totalReports} report(s)${dbTotal > analysis.totalReports ? ` of ${dbTotal} in DB` : ""}; working rate ${pct}.\n` +
-        `Best Proton versions: ${analysis.bestProtonVersions.slice(0, 3).map((v) => `${v.key} (${v.workingCount} ok)`).join(", ") || "n/a"}\n` +
-        `Common launch options (working): ${analysis.bestLaunchOptions.slice(0, 3).map((v) => `${v.key} (${v.workingCount})`).join(", ") || "none reported"}\n` +
-        `Anti-cheat-impacted reports: ${analysis.antiCheatReports}\n` +
-        `GPU vendors: ${analysis.gpuVendors.map((v) => `${v.key} ${v.count}`).join(", ") || "n/a"}`;
+        const dbTotal = countReports(db, appId);
+        const pct =
+          analysis.workingRate === null ? "?" : `${Math.round(analysis.workingRate * 100)}%`;
+        const text =
+          `${analysis.title ?? appId} — ProtonDB tier: ${summary?.tier ?? "unknown"}` +
+          `${summary?.total ? ` (${summary.total} total reports)` : ""}\n` +
+          `Analyzed ${analysis.totalReports} report(s)${dbTotal > analysis.totalReports ? ` of ${dbTotal} in DB` : ""}; working rate ${pct}.\n` +
+          `Best Proton versions: ${
+            analysis.bestProtonVersions
+              .slice(0, 3)
+              .map((v) => `${v.key} (${v.workingCount} ok)`)
+              .join(", ") || "n/a"
+          }\n` +
+          `Common launch options (working): ${
+            analysis.bestLaunchOptions
+              .slice(0, 3)
+              .map((v) => `${v.key} (${v.workingCount})`)
+              .join(", ") || "none reported"
+          }\n` +
+          `Anti-cheat-impacted reports: ${analysis.antiCheatReports}\n` +
+          `GPU vendors: ${analysis.gpuVendors.map((v) => `${v.key} ${v.count}`).join(", ") || "n/a"}`;
 
-      return {
-        content: [{ type: "text", text }],
-        structuredContent: analysis as unknown as Record<string, unknown>,
-      };
-    },
+        return textResult(text, analysis as unknown as Record<string, unknown>);
+      }),
   );
 }

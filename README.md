@@ -2,9 +2,9 @@
 
 An [MCP](https://modelcontextprotocol.io) (Model Context Protocol) server that lets an
 LLM fetch and **analyze ProtonDB Linux/Proton game-compatibility reports** — not just
-the headline tier, but the *individual* community reports (Proton version, hardware,
+the headline tier, but the _individual_ community reports (Proton version, hardware,
 free-text notes) so a model can mine them for patterns and answer "what config works
-best for *my* machine?".
+best for _my_ machine?".
 
 It is environment-aware: it ships an MCP "system prompt" that tells the assistant to
 first detect the user's actual Linux setup (distro, GPU/driver, kernel, Wayland/X11,
@@ -22,7 +22,7 @@ includes common Linux/Proton **troubleshooting** commands.
 ## Why
 
 ProtonDB's public summary API only exposes a tier (gold/silver/…) and a score. The
-*useful* signal for "will this run on my box, and how do I make it run" lives in the
+_useful_ signal for "will this run on my box, and how do I make it run" lives in the
 individual reports: the exact Proton/GE version, the GPU + driver, the distro/kernel,
 and the reporter's free-text notes ("works after disabling anti-cheat", "needs
 `PROTON_USE_WINED3D=1`", "fine on NixOS + Hyprland"). This server makes that corpus
@@ -31,7 +31,7 @@ queryable and analyzable by an LLM.
 ## Features
 
 - **Bulk reports in SQLite** — ingests the [bdefore/protondb-data][bdefore] ODbL export
-  into a local, FTS5-indexed SQLite DB. Dump records are *richer than the live API* —
+  into a local, FTS5-indexed SQLite DB. Dump records are _richer than the live API_ —
   they include `systemInfo` (CPU/GPU/driver/kernel/OS/RAM), which the live API omits.
 - **Daily auto-refresh** — checks the export repo on startup and on an interval, and
   re-ingests when a newer monthly dump exists and local data is stale (past the 1st of
@@ -64,31 +64,37 @@ queryable and analyzable by an LLM.
 
 Data sources:
 
-| Source | Used for | Notes |
-| --- | --- | --- |
-| [bdefore/protondb-data][bdefore] | Bulk individual reports → SQLite | ODbL, monthly, includes hardware/`systemInfo` |
-| protondb.com `/data/reports/...` | Live freshest reports | Captured via headless browser (obfuscated id) |
-| protondb.com summaries API | Current tier/score | `…/api/v1/reports/summaries/{appid}.json` |
-| ProtonDB Algolia `steamdb` index | name → appId search | Public search key; Steam storesearch fallback |
-| Steam store API | Game details, name search fallback | `appdetails`, `storesearch` |
+| Source                           | Used for                           | Notes                                         |
+| -------------------------------- | ---------------------------------- | --------------------------------------------- |
+| [bdefore/protondb-data][bdefore] | Bulk individual reports → SQLite   | ODbL, monthly, includes hardware/`systemInfo` |
+| protondb.com `/data/reports/...` | Live freshest reports              | Captured via headless browser (obfuscated id) |
+| protondb.com summaries API       | Current tier/score                 | `…/api/v1/reports/summaries/{appid}.json`     |
+| ProtonDB Algolia `steamdb` index | name → appId search                | Public search key; Steam storesearch fallback |
+| Steam store API                  | Game details, name search fallback | `appdetails`, `storesearch`                   |
 
 ## Tools
 
 All tools return a concise human summary **and** validated `structuredContent`.
 
 ### `search_games`
+
 Resolve a game name to candidate Steam appIds + metadata.
+
 - `query` (string, required) — e.g. `"Cyberpunk 2077"`
 - `limit` (int, default 10, max 50)
 - → `{ count, games: [{ appId, name, oslist?, tags?, userScore?, releaseYear?, nativeLinux?, source }] }`
 
 ### `get_game_details`
+
 Steam store details + current ProtonDB tier.
+
 - `appId` (string, required)
 - → `{ appId, name, genres?, releaseDate?, nativeLinux?, metacritic?, protonTier, … }`
 
 ### `get_reports`
+
 Individual community reports for a game, with server-side filters.
+
 - `appId` (string) **or** `name` (string)
 - `source` (`auto` | `db` | `live`, default `auto`) — `db` = local bulk-dump DB, `live` =
   freshest scraped reports, `auto` = db then live fallback when the DB has none
@@ -106,7 +112,9 @@ per-category notes, `verdictOob`/`triedOob`, `type`/`variant`, multiplayer appra
 original on top.
 
 ### `analyze_compatibility` — start here
+
 Aggregate a game's reports into patterns.
+
 - `appId` (string) **or** `name` (string)
 - `includeLive` (bool, default false) — also merge the freshest live reports
 - `sampleSize` (int, default 2000, max 5000) — how many DB reports to aggregate
@@ -114,8 +122,10 @@ Aggregate a game's reports into patterns.
   GPU-vendor and distro breakdowns, representative notes, and the live tier summary.
 
 ### `search_reports`
+
 General keyword/full-text search across all reports (notes, title, Proton version, GPU,
 OS). Global, or scoped to one game.
+
 - `query` (string, required) — e.g. `"nixos flatpak"`, `"anti-cheat"`, `"GE-Proton9"`, `"6800 xt"`
 - `appId` / `name` (optional scope), `limit` (int, default 25, max 200)
 - → `{ query, appId, count, truncated, reports: [...] }`
@@ -261,48 +271,54 @@ Published images (from CI) are tagged `:latest`, `:<version>`, `:playwright`, an
 Everything is configurable via env. Defaults in parentheses.
 
 ### Storage
-| Variable | Default | Description |
-| --- | --- | --- |
+
+| Variable          | Default              | Description           |
+| ----------------- | -------------------- | --------------------- |
 | `PROTONDB_MCP_DB` | `./data/protondb.db` | SQLite database path. |
 
 ### HTTP transport (`http-server.js`)
-| Variable | Default | Description |
-| --- | --- | --- |
-| `PROTONDB_MCP_HTTP_HOST` | `127.0.0.1` | Bind host (`0.0.0.0` in containers). |
-| `PROTONDB_MCP_HTTP_PORT` | `3000` | Bind port. |
-| `PROTONDB_MCP_HTTP_PATH` | `/mcp` | MCP endpoint path. |
-| `PROTONDB_MCP_HTTP_ALLOWED_HOSTS` | _(auto)_ | Comma-separated `host[:port]` allowlist for DNS-rebinding protection. When unset, loopback binds get a localhost allowlist and non-loopback binds disable the check. |
-| `PROTONDB_MCP_AUTH_TOKEN` | _(unset)_ | Shared-secret auth for the HTTP endpoint. One or more comma-separated tokens. When unset, the endpoint is **unauthenticated**. Clients send `Authorization: Bearer <token>` (or `X-API-Key: <token>`); `/health` stays open. |
+
+| Variable                          | Default     | Description                                                                                                                                                                                                                  |
+| --------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PROTONDB_MCP_HTTP_HOST`          | `127.0.0.1` | Bind host (`0.0.0.0` in containers).                                                                                                                                                                                         |
+| `PROTONDB_MCP_HTTP_PORT`          | `3000`      | Bind port.                                                                                                                                                                                                                   |
+| `PROTONDB_MCP_HTTP_PATH`          | `/mcp`      | MCP endpoint path.                                                                                                                                                                                                           |
+| `PROTONDB_MCP_HTTP_ALLOWED_HOSTS` | _(auto)_    | Comma-separated `host[:port]` allowlist for DNS-rebinding protection. When unset, loopback binds get a localhost allowlist and non-loopback binds disable the check.                                                         |
+| `PROTONDB_MCP_AUTH_TOKEN`         | _(unset)_   | Shared-secret auth for the HTTP endpoint. One or more comma-separated tokens. When unset, the endpoint is **unauthenticated**. Clients send `Authorization: Bearer <token>` (or `X-API-Key: <token>`); `/health` stays open. |
 
 ### Bulk data & auto-update
-| Variable | Default | Description |
-| --- | --- | --- |
-| `PROTONDB_MCP_AUTO_UPDATE` | `true` | Auto-refresh the bulk dump. |
-| `PROTONDB_MCP_UPDATE_INTERVAL_HOURS` | `24` | Hours between update checks. |
-| `PROTONDB_MCP_DUMP_REPO` | `bdefore/protondb-data` | GitHub repo of the bulk export. |
-| `PROTONDB_MCP_DUMP_BRANCH` | `master` | Branch used for raw download URLs. |
-| `PROTONDB_MCP_GITHUB_TOKEN` / `GITHUB_TOKEN` / `GH_TOKEN` | _(unset)_ | GitHub token to raise the API rate limit when listing dumps. First match wins. |
+
+| Variable                                                  | Default                 | Description                                                                    |
+| --------------------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------ |
+| `PROTONDB_MCP_AUTO_UPDATE`                                | `true`                  | Auto-refresh the bulk dump.                                                    |
+| `PROTONDB_MCP_UPDATE_INTERVAL_HOURS`                      | `24`                    | Hours between update checks.                                                   |
+| `PROTONDB_MCP_DUMP_REPO`                                  | `bdefore/protondb-data` | GitHub repo of the bulk export.                                                |
+| `PROTONDB_MCP_DUMP_BRANCH`                                | `master`                | Branch used for raw download URLs.                                             |
+| `PROTONDB_MCP_GITHUB_TOKEN` / `GITHUB_TOKEN` / `GH_TOKEN` | _(unset)_               | GitHub token to raise the API rate limit when listing dumps. First match wins. |
 
 ### Live capture
-| Variable | Default | Description |
-| --- | --- | --- |
-| `PROTONDB_MCP_ENABLE_LIVE` | `true` | Allow headless live capture (needs Chromium). |
-| `PROTONDB_MCP_LIVE_TIMEOUT_MS` | `25000` | Navigation/response timeout for capture. |
+
+| Variable                       | Default | Description                                   |
+| ------------------------------ | ------- | --------------------------------------------- |
+| `PROTONDB_MCP_ENABLE_LIVE`     | `true`  | Allow headless live capture (needs Chromium). |
+| `PROTONDB_MCP_LIVE_TIMEOUT_MS` | `25000` | Navigation/response timeout for capture.      |
 
 ### Outbound HTTP
-| Variable | Default | Description |
-| --- | --- | --- |
-| `PROTONDB_MCP_USER_AGENT` | `protondb-mcp/…` | User-Agent for outbound requests. |
-| `PROTONDB_MCP_HTTP_TIMEOUT_MS` | `15000` | Per-request timeout. |
-| `PROTONDB_MCP_HTTP_RETRIES` | `2` | Retries on 429/5xx/network errors. |
-| `PROTONDB_MCP_CACHE_TTL_MS` | _(per-call)_ | Override every response cache TTL; `0` disables caching. |
+
+| Variable                       | Default          | Description                                              |
+| ------------------------------ | ---------------- | -------------------------------------------------------- |
+| `PROTONDB_MCP_USER_AGENT`      | `protondb-mcp/…` | User-Agent for outbound requests.                        |
+| `PROTONDB_MCP_HTTP_TIMEOUT_MS` | `15000`          | Per-request timeout.                                     |
+| `PROTONDB_MCP_HTTP_RETRIES`    | `2`              | Retries on 429/5xx/network errors.                       |
+| `PROTONDB_MCP_CACHE_TTL_MS`    | _(per-call)_     | Override every response cache TTL; `0` disables caching. |
 
 ### Search
-| Variable | Default | Description |
-| --- | --- | --- |
-| `ALGOLIA_APP_ID` | ProtonDB public | Algolia application id. |
+
+| Variable          | Default         | Description              |
+| ----------------- | --------------- | ------------------------ |
+| `ALGOLIA_APP_ID`  | ProtonDB public | Algolia application id.  |
 | `ALGOLIA_API_KEY` | ProtonDB public | Algolia search-only key. |
-| `ALGOLIA_INDEX` | `steamdb` | Algolia index name. |
+| `ALGOLIA_INDEX`   | `steamdb`       | Algolia index name.      |
 
 ## Ingestion CLI
 
@@ -336,7 +352,7 @@ so migrations are simple:
   migration runner (`src/db/migrate.ts`). A fresh DB is created at the current version and
   stamped; append a migration to evolve it.
 - **Field extraction** is versioned separately as `EXTRACTION_VERSION` (stored in meta as
-  `data_version`). When we change *which* fields are captured, we bump it; on the next
+  `data_version`). When we change _which_ fields are captured, we bump it; on the next
   start the auto-updater sees the DB's `data_version` is behind and **re-ingests** to
   backfill the new fields. So **deploying a new version auto-migrates running deployments**
   on their own — no manual migration step. (To force it immediately, delete the volume's
@@ -347,7 +363,7 @@ so migrations are simple:
 
 CalVer (`YYYY.M.MICRO`, e.g. `2026.6.0`) via two complementary GitHub Actions:
 
-- **`release-calendar.yaml`** — scheduled job that *always* cuts a release + containers
+- **`release-calendar.yaml`** — scheduled job that _always_ cuts a release + containers
   on the **2nd of every month** (`YYYY.M.0`), aligned with the monthly data dump.
 - **`release-please.yaml`** — conventional-commit releases between the monthly cuts,
   bumping only the MICRO (`always-bump-patch`).

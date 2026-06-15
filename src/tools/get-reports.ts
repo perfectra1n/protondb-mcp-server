@@ -3,7 +3,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getDb } from "../db/store.js";
 import { getReports, countReports } from "../db/queries.js";
 import { tryFetchLiveReports } from "../sources/protondb-live.js";
-import { resolveAppId } from "./resolve.js";
+import { withResolvedAppId, textResult } from "./result.js";
 import { ReportSchema, type Report } from "../lib/types.js";
 
 const inputSchema = z.object({
@@ -57,7 +57,12 @@ const outputSchema = z.object({
 
 function applyInMemoryFilters(
   reports: Report[],
-  f: { verdict?: "yes" | "no"; protonVersionContains?: string; gpuContains?: string; since?: number },
+  f: {
+    verdict?: "yes" | "no";
+    protonVersionContains?: string;
+    gpuContains?: string;
+    since?: number;
+  },
 ): Report[] {
   return reports.filter((r) => {
     if (f.verdict && r.verdict !== f.verdict) return false;
@@ -89,72 +94,69 @@ export function registerGetReports(server: McpServer): void {
       inputSchema,
       outputSchema,
     },
-    async (args) => {
-      let resolved;
-      try {
-        resolved = await resolveAppId(args);
-      } catch (err) {
-        return { content: [{ type: "text", text: (err as Error).message }], isError: true };
-      }
-      const { appId, name } = resolved;
-      const filters = {
-        verdict: args.verdict,
-        protonVersionContains: args.protonVersionContains,
-        gpuContains: args.gpuContains,
-        since: args.since,
-      };
+    async (args) =>
+      withResolvedAppId(args, async ({ appId, name }) => {
+        const filters = {
+          verdict: args.verdict,
+          protonVersionContains: args.protonVersionContains,
+          gpuContains: args.gpuContains,
+          since: args.since,
+        };
 
-      let reports: Report[] = [];
-      let usedSource: "db" | "live" = "db";
-      let note: string | undefined;
+        let reports: Report[] = [];
+        let usedSource: "db" | "live" = "db";
+        let note: string | undefined;
 
-      const db = getDb();
-      const dbCount = countReports(db, appId);
+        const db = getDb();
+        const dbCount = countReports(db, appId);
 
-      // Live capture never throws here: failures are logged and we continue,
-      // falling back to the DB (for 'auto') or returning an empty, non-error
-      // result with an explanatory note (for explicit 'live').
-      if (args.source === "live" || (args.source === "auto" && dbCount === 0)) {
-        const { reports: live, error } = await tryFetchLiveReports(appId, args.limit);
-        if (live.length > 0 || args.source === "live") {
-          const filtered = applyInMemoryFilters(live, filters).slice(0, args.limit);
-          // Live records always carry `raw`; drop it unless explicitly requested.
-          reports = args.includeRaw ? filtered : filtered.map(({ raw, ...rest }) => rest);
-          usedSource = "live";
-          if (error) note = `Live capture unavailable, returned no reports: ${error}`;
-        } else if (error) {
-          note = `Live fallback failed (${error}); returning local DB results.`;
+        // Live capture never throws here: failures are logged and we continue,
+        // falling back to the DB (for 'auto') or returning an empty, non-error
+        // result with an explanatory note (for explicit 'live').
+        if (args.source === "live" || (args.source === "auto" && dbCount === 0)) {
+          const { reports: live, error } = await tryFetchLiveReports(appId, args.limit);
+          if (live.length > 0 || args.source === "live") {
+            const filtered = applyInMemoryFilters(live, filters).slice(0, args.limit);
+            // Live records always carry `raw`; drop it unless explicitly requested.
+            reports = args.includeRaw ? filtered : filtered.map(({ raw, ...rest }) => rest);
+            usedSource = "live";
+            if (error) note = `Live capture unavailable, returned no reports: ${error}`;
+          } else if (error) {
+            note = `Live fallback failed (${error}); returning local DB results.`;
+          }
         }
-      }
 
-      if (usedSource === "db") {
-        reports = getReports(db, { appId, limit: args.limit, includeRaw: args.includeRaw, ...filters });
-      }
+        if (usedSource === "db") {
+          reports = getReports(db, {
+            appId,
+            limit: args.limit,
+            includeRaw: args.includeRaw,
+            ...filters,
+          });
+        }
 
-      const truncated = usedSource === "db" ? dbCount > reports.length : reports.length >= args.limit;
-      const structured = {
-        appId,
-        name,
-        source: usedSource,
-        count: reports.length,
-        truncated,
-        note,
-        reports,
-      };
-      const head =
-        `${reports.length} report(s) for appId ${appId}${name ? ` (${name})` : ""} from ${usedSource}.` +
-        (note ? `\n${note}` : "");
-      const samples = reports
-        .slice(0, 5)
-        .map(
-          (r) =>
-            `- [${r.works === true ? "works" : r.works === false ? "borked" : "?"}] ${r.protonVersion ?? "?"}${r.gpu ? ` / ${r.gpu}` : ""}: ${(r.notes ?? "(no notes)").slice(0, 160)}`,
-        )
-        .join("\n");
-      return {
-        content: [{ type: "text", text: `${head}\n${samples}` }],
-        structuredContent: structured,
-      };
-    },
+        const truncated =
+          usedSource === "db" ? dbCount > reports.length : reports.length >= args.limit;
+        const structured = {
+          appId,
+          name,
+          source: usedSource,
+          count: reports.length,
+          truncated,
+          note,
+          reports,
+        };
+        const head =
+          `${reports.length} report(s) for appId ${appId}${name ? ` (${name})` : ""} from ${usedSource}.` +
+          (note ? `\n${note}` : "");
+        const samples = reports
+          .slice(0, 5)
+          .map(
+            (r) =>
+              `- [${r.works === true ? "works" : r.works === false ? "borked" : "?"}] ${r.protonVersion ?? "?"}${r.gpu ? ` / ${r.gpu}` : ""}: ${(r.notes ?? "(no notes)").slice(0, 160)}`,
+          )
+          .join("\n");
+        return textResult(`${head}\n${samples}`, structured);
+      }),
   );
 }

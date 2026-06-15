@@ -2,6 +2,8 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getSteamDetails } from "../sources/steam.js";
 import { getSummary } from "../sources/summary.js";
+import { textResult, errorResult } from "./result.js";
+import { errMessage } from "../lib/coerce.js";
 
 const inputSchema = z.object({
   appId: z.string().min(1).describe("Steam application id (use search_games to find it)"),
@@ -32,20 +34,26 @@ export function registerGetGameDetails(server: McpServer): void {
       outputSchema,
     },
     async ({ appId }) => {
-      const [details, summary] = await Promise.all([
-        getSteamDetails(appId),
+      // getSummary already swallows its own errors (returns null); getSteamDetails
+      // throws on a network/HTTP failure, so settle it explicitly to distinguish
+      // "Steam unreachable" from a genuinely delisted app (and keep both in flight).
+      const [summary, steam] = await Promise.all([
         getSummary(appId),
+        getSteamDetails(appId).then(
+          (d) => ({ ok: true as const, details: d }),
+          (e: unknown) => ({ ok: false as const, error: e }),
+        ),
       ]);
+      if (!steam.ok) {
+        return errorResult(
+          `Could not reach the Steam store for appId ${appId}: ${errMessage(steam.error)}. Try again shortly.`,
+        );
+      }
+      const details = steam.details;
       if (!details) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `No Steam store details found for appId ${appId}. It may be delisted or not a public app.`,
-            },
-          ],
-          isError: true,
-        };
+        return errorResult(
+          `No Steam store details found for appId ${appId}. It may be delisted or not a public app.`,
+        );
       }
       const structured = {
         appId: details.appId,
@@ -63,10 +71,7 @@ export function registerGetGameDetails(server: McpServer): void {
         `${details.name} (appId ${details.appId})\n` +
         `Released: ${details.releaseDate ?? "?"} | Genres: ${details.genres?.join(", ") ?? "?"}\n` +
         `Native Linux: ${details.nativeLinux ? "yes" : "no"} | ProtonDB tier: ${summary?.tier ?? "unknown"}`;
-      return {
-        content: [{ type: "text", text }],
-        structuredContent: structured,
-      };
+      return textResult(text, structured);
     },
   );
 }

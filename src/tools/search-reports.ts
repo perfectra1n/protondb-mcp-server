@@ -3,6 +3,8 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getDb } from "../db/store.js";
 import { searchReports } from "../db/queries.js";
 import { resolveAppId } from "./resolve.js";
+import { textResult, errorResult } from "./result.js";
+import { errMessage } from "../lib/coerce.js";
 import { ReportSchema } from "../lib/types.js";
 
 const inputSchema = z.object({
@@ -53,7 +55,7 @@ export function registerSearchReports(server: McpServer): void {
         try {
           appId = (await resolveAppId(args)).appId;
         } catch (err) {
-          return { content: [{ type: "text", text: (err as Error).message }], isError: true };
+          return errorResult(errMessage(err));
         }
       }
       const db = getDb();
@@ -61,15 +63,7 @@ export function registerSearchReports(server: McpServer): void {
       try {
         reports = searchReports(db, args.query, { appId: appId ?? undefined, limit: args.limit });
       } catch (err) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Invalid search query: ${(err as Error).message}. Use simple keywords.`,
-            },
-          ],
-          isError: true,
-        };
+        return errorResult(`Invalid search query: ${errMessage(err)}. Use simple keywords.`);
       }
       const structured = {
         query: args.query,
@@ -85,15 +79,10 @@ export function registerSearchReports(server: McpServer): void {
             `- (${r.appId}${r.title ? ` ${r.title}` : ""}) [${r.protonVersion ?? "?"}${r.gpu ? ` / ${r.gpu}` : ""}] ${(r.notes ?? "").slice(0, 140)}`,
         )
         .join("\n");
-      return {
-        content: [
-          {
-            type: "text",
-            text: `${reports.length} report(s) matching "${args.query}"${appId ? ` for appId ${appId}` : ""}:\n${samples}`,
-          },
-        ],
-        structuredContent: structured,
-      };
+      return textResult(
+        `${reports.length} report(s) matching "${args.query}"${appId ? ` for appId ${appId}` : ""}:\n${samples}`,
+        structured,
+      );
     },
   );
 }

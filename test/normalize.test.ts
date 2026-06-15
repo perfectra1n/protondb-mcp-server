@@ -94,9 +94,10 @@ describe("normalizeReport", () => {
     expect(r.notes).not.toContain("Heroic");
     // nothing is lost — raw holds the complete record incl. systemInfo extras
     expect(r.raw).toBeTruthy();
-    expect((r.raw as any).systemInfo.steamRuntimeVersion).toBe("sniper");
-    expect((r.raw as any).systemInfo.xWindowManager).toBe("kwin");
-    expect((r.raw as any).responses.notes.launcher).toBe("Heroic");
+    const raw = r.raw as Record<string, Record<string, Record<string, unknown>>>;
+    expect(raw.systemInfo.steamRuntimeVersion).toBe("sniper");
+    expect(raw.systemInfo.xWindowManager).toBe("kwin");
+    expect(raw.responses.notes.launcher).toBe("Heroic");
   });
 });
 

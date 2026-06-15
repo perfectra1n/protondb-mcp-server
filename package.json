@@ -23,6 +23,9 @@
     "dev": "tsc && node dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
+    "lint": "eslint src test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "inspector": "pnpm build && npx @modelcontextprotocol/inspector node dist/index.js"
   },
   "dependencies": {
@@ -36,10 +39,15 @@
     "playwright": "^1.50.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.13.0",
     "@types/stream-json": "^1.7.8",
+    "eslint": "^10.5.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.4",
     "typescript": "^5.7.3",
+    "typescript-eslint": "^8.61.0",
     "vitest": "^3.0.0"
   }
 }

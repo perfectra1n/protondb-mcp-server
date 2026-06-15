@@ -120,7 +120,8 @@ export function makeInserter(db: DB): (rep: Report) => void {
       proton_version: rep.protonVersion,
       launcher: rep.launcher,
       launch_options: rep.launchOptions,
-      anti_cheat: rep.antiCheat === null || rep.antiCheat === undefined ? null : rep.antiCheat ? 1 : 0,
+      anti_cheat:
+        rep.antiCheat === null || rep.antiCheat === undefined ? null : rep.antiCheat ? 1 : 0,
       timestamp: rep.timestamp,
       cpu: rep.cpu,
       gpu: rep.gpu,

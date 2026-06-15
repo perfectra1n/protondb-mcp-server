@@ -1,7 +1,8 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { config } from "./config.js";
-import { log } from "./http.js";
+import { log, logger } from "./logger.js";
+import { errMessage } from "./coerce.js";
 import { getDb, swapDb } from "../db/store.js";
 import { getMeta } from "../db/schema.js";
 import { EXTRACTION_VERSION } from "../db/migrate.js";
@@ -48,8 +49,7 @@ export function shouldUpdate(i: StalenessInput): StalenessDecision {
   const year = i.now.getUTCFullYear();
   const month = i.now.getUTCMonth() + 1;
   const ym = i.ingestedYearMonth;
-  const predatesCurrentMonth =
-    !!ym && (ym.year < year || (ym.year === year && ym.month < month));
+  const predatesCurrentMonth = !!ym && (ym.year < year || (ym.year === year && ym.month < month));
   if (!predatesCurrentMonth) {
     return { update: false, reason: "local data is from the current month" };
   }
@@ -115,7 +115,7 @@ export async function runAutoUpdate(now: Date = new Date()): Promise<boolean> {
     }
     return true;
   } catch (err) {
-    log("auto-update error:", (err as Error).message);
+    logger.error("auto-update error:", errMessage(err));
     return false;
   } finally {
     running = false;

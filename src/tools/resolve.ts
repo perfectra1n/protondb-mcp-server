@@ -1,6 +1,7 @@
 import { searchAlgolia } from "../sources/algolia.js";
 import { searchSteam } from "../sources/steam.js";
-import { log } from "../lib/http.js";
+import { logger } from "../lib/logger.js";
+import { errMessage } from "../lib/coerce.js";
 import type { GameHit } from "../lib/types.js";
 
 /** Search for games by name: ProtonDB's Algolia index, Steam as a fallback. */
@@ -9,12 +10,12 @@ export async function searchGames(query: string, limit = 10): Promise<GameHit[]>
     const hits = await searchAlgolia(query, limit);
     if (hits.length > 0) return hits;
   } catch (err) {
-    log("algolia search failed, falling back to steam:", (err as Error).message);
+    logger.warn("algolia search failed, falling back to steam:", errMessage(err));
   }
   try {
     return await searchSteam(query, limit);
   } catch (err) {
-    log("steam search failed:", (err as Error).message);
+    logger.warn("steam search failed:", errMessage(err));
     return [];
   }
 }

@@ -19,11 +19,28 @@ afterEach(() => rmSync(workDir, { recursive: true, force: true }));
 
 function rep(): Report {
   return {
-    appId: "570", title: "Dota 2", verdict: "yes", works: true, notes: "ok",
-    protonVersion: "Experimental", launcher: "steam", launchOptions: "mangohud %command%",
-    antiCheat: false, timestamp: 1, cpu: null, gpu: "AMD", gpuDriver: null, kernel: null,
-    os: "Arch", ram: null, playtimeMinutes: null, source: "dump",
-    responses: { verdict: "yes" }, systemInfo: { gpu: "AMD" }, device: null, contributor: null,
+    appId: "570",
+    title: "Dota 2",
+    verdict: "yes",
+    works: true,
+    notes: "ok",
+    protonVersion: "Experimental",
+    launcher: "steam",
+    launchOptions: "mangohud %command%",
+    antiCheat: false,
+    timestamp: 1,
+    cpu: null,
+    gpu: "AMD",
+    gpuDriver: null,
+    kernel: null,
+    os: "Arch",
+    ram: null,
+    playtimeMinutes: null,
+    source: "dump",
+    responses: { verdict: "yes" },
+    systemInfo: { gpu: "AMD" },
+    device: null,
+    contributor: null,
     raw: { hello: "world" },
   };
 }
@@ -40,7 +57,7 @@ describe("PRAGMA user_version migrations", () => {
     makeInserter(db)(rep());
     const r = getReports(db, { appId: "570", includeRaw: true })[0]!;
     expect(r.launchOptions).toBe("mangohud %command%");
-    expect((r.raw as any).hello).toBe("world");
+    expect((r.raw as Record<string, unknown>).hello).toBe("world");
     db.close();
   });
 
@@ -74,9 +91,7 @@ describe("PRAGMA user_version migrations", () => {
     const rows = getReports(db, { appId: "570" });
     expect(rows.length).toBe(1);
     expect(rows[0]!.launchOptions).toBeNull();
-    expect(rows[0]!.systemInfo).toEqual(
-      expect.objectContaining({ gpu: "AMD", os: "Arch" }),
-    );
+    expect(rows[0]!.systemInfo).toEqual(expect.objectContaining({ gpu: "AMD", os: "Arch" }));
     expect(totalReports(db)).toBe(1);
     db.close();
   });

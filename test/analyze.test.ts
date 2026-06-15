@@ -28,10 +28,40 @@ function rep(p: Partial<Report>): Report {
 
 describe("analyzeReports", () => {
   const reports: Report[] = [
-    rep({ works: true, verdict: "yes", protonVersion: "GE-Proton9-1", gpu: "NVIDIA RTX 4080", os: "Arch", notes: "Runs great", timestamp: 30 }),
-    rep({ works: true, verdict: "yes", protonVersion: "GE-Proton9-1", gpu: "AMD RX 6800", os: "Arch", notes: "Smooth", timestamp: 20 }),
-    rep({ works: false, verdict: "no", protonVersion: "Default", gpu: "NVIDIA GTX 1060", os: "Ubuntu", notes: "Crashes on launch", timestamp: 10 }),
-    rep({ works: true, verdict: "yes", protonVersion: "Experimental", gpu: "Intel Arc", os: "Fedora" }),
+    rep({
+      works: true,
+      verdict: "yes",
+      protonVersion: "GE-Proton9-1",
+      gpu: "NVIDIA RTX 4080",
+      os: "Arch",
+      notes: "Runs great",
+      timestamp: 30,
+    }),
+    rep({
+      works: true,
+      verdict: "yes",
+      protonVersion: "GE-Proton9-1",
+      gpu: "AMD RX 6800",
+      os: "Arch",
+      notes: "Smooth",
+      timestamp: 20,
+    }),
+    rep({
+      works: false,
+      verdict: "no",
+      protonVersion: "Default",
+      gpu: "NVIDIA GTX 1060",
+      os: "Ubuntu",
+      notes: "Crashes on launch",
+      timestamp: 10,
+    }),
+    rep({
+      works: true,
+      verdict: "yes",
+      protonVersion: "Experimental",
+      gpu: "Intel Arc",
+      os: "Fedora",
+    }),
   ];
 
   it("computes verdict breakdown and working rate", () => {

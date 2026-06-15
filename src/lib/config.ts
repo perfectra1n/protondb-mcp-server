@@ -1,13 +1,13 @@
 import { resolve } from "node:path";
 
 /** Read a string env var, falling back when unset/empty. */
-function envStr(key: string, fallback: string): string {
+export function envStr(key: string, fallback: string): string {
   const v = process.env[key];
   return v !== undefined && v.trim() !== "" ? v : fallback;
 }
 
 /** Read an integer env var, falling back when unset/invalid. */
-function envInt(key: string, fallback: number): number {
+export function envInt(key: string, fallback: number): number {
   const v = process.env[key];
   if (v === undefined || v.trim() === "") return fallback;
   const n = Number(v);
@@ -15,14 +15,14 @@ function envInt(key: string, fallback: number): number {
 }
 
 /** Read a boolean env var. Anything but false/0/no/off (case-insensitive) is true. */
-function envBool(key: string, fallback: boolean): boolean {
+export function envBool(key: string, fallback: boolean): boolean {
   const v = process.env[key];
   if (v === undefined) return fallback;
   return !["false", "0", "no", "off", ""].includes(v.trim().toLowerCase());
 }
 
 /** Read a comma-separated list env var, or undefined when unset. */
-function envList(key: string): string[] | undefined {
+export function envList(key: string): string[] | undefined {
   const v = process.env[key];
   if (v === undefined || v.trim() === "") return undefined;
   return v
@@ -32,7 +32,7 @@ function envList(key: string): string[] | undefined {
 }
 
 /** First non-empty value among the given env keys, else undefined. */
-function envFirst(...keys: string[]): string | undefined {
+export function envFirst(...keys: string[]): string | undefined {
   for (const k of keys) {
     const v = process.env[k];
     if (v !== undefined && v.trim() !== "") return v;
@@ -60,6 +60,12 @@ export const config = {
     process.env.PROTONDB_MCP_CACHE_TTL_MS !== undefined
       ? envInt("PROTONDB_MCP_CACHE_TTL_MS", 0)
       : null,
+  // Cap on cached JSON responses; oldest entries are evicted past this to keep
+  // a long-running server's memory bounded.
+  httpCacheMaxEntries: envInt("PROTONDB_MCP_CACHE_MAX_ENTRIES", 500),
+
+  // Logging verbosity: error | warn | info | debug (anything else => info).
+  logLevel: envStr("PROTONDB_MCP_LOG_LEVEL", "info"),
 
   // Streamable HTTP transport (http-server.ts)
   httpHost: envStr("PROTONDB_MCP_HTTP_HOST", "127.0.0.1"),

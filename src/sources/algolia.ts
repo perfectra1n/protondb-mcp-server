@@ -1,36 +1,28 @@
+import { z } from "zod";
 import { config } from "../lib/config.js";
 import { fetchJson } from "../lib/http.js";
+import { num, toStringArray } from "../lib/coerce.js";
 import type { GameHit } from "../lib/types.js";
 
-interface AlgoliaHit {
-  objectID: string;
-  name?: unknown;
-  oslist?: unknown;
-  tags?: unknown;
-  // Algolia returns these loosely typed: userScore can be null, and releaseYear
-  // can be a string like "Soon" or "2026" as well as a number.
-  userScore?: unknown;
-  releaseYear?: unknown;
-}
-interface AlgoliaResponse {
-  hits: AlgoliaHit[];
-}
-
-/** Coerce an unknown value to a finite number, or undefined. */
-export function toNumber(v: unknown): number | undefined {
-  if (typeof v === "number" && Number.isFinite(v)) return v;
-  if (typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v))) {
-    return Number(v);
-  }
-  return undefined;
-}
-
-/** Coerce an unknown value to a string array (of strings), or undefined. */
-function toStringArray(v: unknown): string[] | undefined {
-  if (!Array.isArray(v)) return undefined;
-  const arr = v.filter((x): x is string => typeof x === "string");
-  return arr.length > 0 ? arr : undefined;
-}
+// Algolia hits are loosely typed (userScore can be null; releaseYear can be a
+// string like "Soon" or a number), so only objectID is required — everything
+// else stays `unknown` and is coerced defensively below.
+const AlgoliaResponseSchema = z.object({
+  hits: z
+    .array(
+      z
+        .object({
+          objectID: z.string(),
+          name: z.unknown(),
+          oslist: z.unknown(),
+          tags: z.unknown(),
+          userScore: z.unknown(),
+          releaseYear: z.unknown(),
+        })
+        .passthrough(),
+    )
+    .optional(),
+});
 
 /**
  * Search ProtonDB's own Algolia "steamdb" index by game name. This is the
@@ -44,16 +36,9 @@ export async function searchAlgolia(query: string, limit: number): Promise<GameH
     query,
     facetFilters: [["appType:Game"]],
     hitsPerPage: Math.max(1, Math.min(limit, 50)),
-    attributesToRetrieve: [
-      "name",
-      "objectID",
-      "oslist",
-      "releaseYear",
-      "tags",
-      "userScore",
-    ],
+    attributesToRetrieve: ["name", "objectID", "oslist", "releaseYear", "tags", "userScore"],
   });
-  const data = await fetchJson<AlgoliaResponse>(url, {
+  const data = await fetchJson(url, {
     method: "POST",
     body,
     headers: {
@@ -66,16 +51,17 @@ export async function searchAlgolia(query: string, limit: number): Promise<GameH
     },
     cacheTtlMs: 10 * 60_000,
     retries: 1,
+    schema: AlgoliaResponseSchema,
   });
-  return data.hits.map((h) => {
+  return (data.hits ?? []).map((h) => {
     const oslist = toStringArray(h.oslist);
     return {
       appId: h.objectID,
       name: typeof h.name === "string" ? h.name : "(unknown)",
       oslist,
       tags: toStringArray(h.tags)?.slice(0, 12),
-      userScore: toNumber(h.userScore),
-      releaseYear: toNumber(h.releaseYear),
+      userScore: num(h.userScore) ?? undefined,
+      releaseYear: num(h.releaseYear) ?? undefined,
       nativeLinux: oslist?.some((o) => /linux|steamos/i.test(o)) ?? undefined,
       source: "algolia" as const,
     };

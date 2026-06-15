@@ -11,7 +11,9 @@ import { x as extractTar } from "tar";
 const { parser } = streamJson;
 const { streamArray } = StreamArrayMod;
 import { config } from "../lib/config.js";
-import { httpFetch, log } from "../lib/http.js";
+import { httpFetch } from "../lib/http.js";
+import { log, logger } from "../lib/logger.js";
+import { errMessage } from "../lib/coerce.js";
 import { normalizeReport } from "../lib/normalize.js";
 import { openDb, makeInserter, setMeta } from "../db/schema.js";
 import { EXTRACTION_VERSION } from "../db/migrate.js";
@@ -38,8 +40,10 @@ async function downloadTo(url: string, dest: string): Promise<void> {
   log("downloading", url);
   const res = await httpFetch(url, { timeoutMs: 120_000, retries: 2 });
   if (!res.ok || !res.body) throw new Error(`download failed: HTTP ${res.status}`);
-  await pipeline(Readable.fromWeb(res.body as Parameters<typeof Readable.fromWeb>[0]),
-    createWriteStream(dest));
+  await pipeline(
+    Readable.fromWeb(res.body as Parameters<typeof Readable.fromWeb>[0]),
+    createWriteStream(dest),
+  );
 }
 
 /** Resolve where the JSON report array lives, downloading/extracting as needed. */
@@ -92,10 +96,7 @@ async function resolveJsonPath(
  * reports into a fresh SQLite database at `targetDbPath`. Existing DB at the
  * target is replaced. Returns ingest statistics.
  */
-export async function ingestToDb(
-  source: IngestSource,
-  targetDbPath: string,
-): Promise<IngestStats> {
+export async function ingestToDb(source: IngestSource, targetDbPath: string): Promise<IngestStats> {
   const workDir = mkdtempSync(join(tmpdir(), "protondb-ingest-"));
   // Start from a clean target DB.
   for (const p of [targetDbPath, targetDbPath + "-wal", targetDbPath + "-shm"]) {
@@ -107,6 +108,10 @@ export async function ingestToDb(
     const insert = makeInserter(db);
 
     let count = 0;
+    let skipped = 0;
+    // Single all-or-nothing transaction: the DB is built in a temp file and only
+    // atomically swapped into place on success (see auto-update swapDb), so a
+    // partial ingest must never be committed.
     db.exec("BEGIN");
     try {
       await pipeline(
@@ -119,15 +124,24 @@ export async function ingestToDb(
             if (rep) {
               insert(rep);
               count++;
+            } else {
+              skipped++;
             }
           }
         },
       );
       db.exec("COMMIT");
     } catch (err) {
-      db.exec("ROLLBACK");
+      // Best-effort rollback; never let a rollback failure mask the original
+      // error (the temp DB is discarded regardless).
+      try {
+        db.exec("ROLLBACK");
+      } catch (rollbackErr) {
+        logger.error("ingest rollback failed:", errMessage(rollbackErr));
+      }
       throw err;
     }
+    if (skipped > 0) logger.warn(`skipped ${skipped} records with no usable appId`);
 
     setMeta(db, "dump_file", dumpFile);
     if (dumpDate) setMeta(db, "dump_date", dumpDate);
@@ -165,7 +179,7 @@ if (isMain) {
       process.exit(0);
     })
     .catch((err) => {
-      log("ingest failed:", (err as Error).message);
+      logger.error("ingest failed:", errMessage(err));
       process.exit(1);
     });
 }

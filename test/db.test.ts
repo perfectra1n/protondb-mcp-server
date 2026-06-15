@@ -88,8 +88,22 @@ describe("db schema + queries", () => {
 
   it("general search matches hardware / OS / proton fields, not just notes", () => {
     const insert = makeInserter(db);
-    insert(rep({ notes: "fine", os: "NixOS 24.05", gpu: "AMD RX 6800 XT", protonVersion: "GE-Proton9-1" }));
-    insert(rep({ notes: "fine", os: "Ubuntu 24.04", gpu: "NVIDIA RTX 4080", protonVersion: "Experimental" }));
+    insert(
+      rep({
+        notes: "fine",
+        os: "NixOS 24.05",
+        gpu: "AMD RX 6800 XT",
+        protonVersion: "GE-Proton9-1",
+      }),
+    );
+    insert(
+      rep({
+        notes: "fine",
+        os: "Ubuntu 24.04",
+        gpu: "NVIDIA RTX 4080",
+        protonVersion: "Experimental",
+      }),
+    );
 
     expect(searchReports(db, "nixos").length).toBe(1);
     expect(searchReports(db, "6800").length).toBe(1);
@@ -134,7 +148,11 @@ describe("ingestToDb (integration, local JSON fixture)", () => {
       },
       {
         app: { steam: { appId: "1091500" }, title: "Cyberpunk 2077" },
-        responses: { verdict: "no", protonVersion: "Default", notes: { verdict: "borked", extra: "black screen" } },
+        responses: {
+          verdict: "no",
+          protonVersion: "Default",
+          notes: { verdict: "borked", extra: "black screen" },
+        },
         timestamp: 1700000100,
         systemInfo: { gpu: "AMD RX 580", os: "Ubuntu" },
       },

@@ -39,11 +39,7 @@ export interface Analysis {
   noteSamples: NoteSample[];
 }
 
-function tally(
-  reports: Report[],
-  keyFn: (r: Report) => string | null,
-  topN: number,
-): Count[] {
+function tally(reports: Report[], keyFn: (r: Report) => string | null, topN: number): Count[] {
   const map = new Map<string, Count>();
   for (const r of reports) {
     const key = keyFn(r);

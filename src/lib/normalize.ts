@@ -1,4 +1,5 @@
 import type { Report } from "./types.js";
+import { str, num, bool } from "./coerce.js";
 
 /** Loose structural typing — records carry far more than we type explicitly. */
 interface RawResponses {
@@ -23,30 +24,6 @@ interface RawRecord {
   systemInfo?: Record<string, unknown>;
   contributor?: { steam?: { playtime?: unknown } };
   [key: string]: unknown;
-}
-
-function str(v: unknown): string | null {
-  if (typeof v === "string") {
-    const t = v.trim();
-    return t.length > 0 ? t : null;
-  }
-  if (typeof v === "number") return String(v);
-  return null;
-}
-
-function num(v: unknown): number | null {
-  if (typeof v === "number" && Number.isFinite(v)) return v;
-  if (typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v))) {
-    return Number(v);
-  }
-  return null;
-}
-
-function bool(v: unknown): boolean | null {
-  if (typeof v === "boolean") return v;
-  if (v === "yes" || v === "true") return true;
-  if (v === "no" || v === "false") return false;
-  return null;
 }
 
 // Note keys that duplicate structured fields — kept in `raw`, excluded from the

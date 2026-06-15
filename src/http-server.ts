@@ -8,7 +8,8 @@ import { config } from "./lib/config.js";
 import { startAutoUpdate, stopAutoUpdate } from "./lib/auto-update.js";
 import { closeBrowser } from "./sources/protondb-live.js";
 import { closeDb, isReady } from "./db/store.js";
-import { log } from "./lib/http.js";
+import { log, logger } from "./lib/logger.js";
+import { errMessage } from "./lib/coerce.js";
 
 const transports = new Map<string, StreamableHTTPServerTransport>();
 
@@ -147,7 +148,7 @@ async function main(): Promise<void> {
         return;
       }
       handleMcp(req, res).catch((err) => {
-        log("request error:", (err as Error).message);
+        logger.error("request error:", errMessage(err));
         if (!res.headersSent) res.writeHead(500).end();
       });
       return;
@@ -176,6 +177,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  log("fatal:", (err as Error).message);
+  logger.error("fatal:", errMessage(err));
   process.exit(1);
 });
