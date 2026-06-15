@@ -185,6 +185,32 @@ pnpm exec playwright install chromium
 http://127.0.0.1:3000/mcp
 ```
 
+### Authentication (HTTP transport)
+
+The stdio transport is local and needs no auth. The HTTP transport is unauthenticated
+by default; set `PROTONDB_MCP_AUTH_TOKEN` (one token, or several comma-separated) to
+require a shared secret. Clients then send it as a bearer token:
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" http://host:3000/mcp ...
+```
+
+In an MCP client config that supports custom headers:
+
+```json
+{
+  "mcpServers": {
+    "protondb": {
+      "url": "https://host:3000/mcp",
+      "headers": { "Authorization": "Bearer YOUR_TOKEN" }
+    }
+  }
+}
+```
+
+`/health` is always reachable without a token (for container healthchecks). Always pair
+a token with TLS (terminate HTTPS at a reverse proxy) so the secret isn't sent in clear.
+
 ## Docker
 
 The repo ships two images:
@@ -234,6 +260,7 @@ Everything is configurable via env. Defaults in parentheses.
 | `PROTONDB_MCP_HTTP_PORT` | `3000` | Bind port. |
 | `PROTONDB_MCP_HTTP_PATH` | `/mcp` | MCP endpoint path. |
 | `PROTONDB_MCP_HTTP_ALLOWED_HOSTS` | _(auto)_ | Comma-separated `host[:port]` allowlist for DNS-rebinding protection. When unset, loopback binds get a localhost allowlist and non-loopback binds disable the check. |
+| `PROTONDB_MCP_AUTH_TOKEN` | _(unset)_ | Shared-secret auth for the HTTP endpoint. One or more comma-separated tokens. When unset, the endpoint is **unauthenticated**. Clients send `Authorization: Bearer <token>` (or `X-API-Key: <token>`); `/health` stays open. |
 
 ### Bulk data & auto-update
 | Variable | Default | Description |

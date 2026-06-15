@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { buildServer } from "./server.js";
@@ -11,6 +11,30 @@ import { closeDb } from "./db/store.js";
 import { log } from "./lib/http.js";
 
 const transports = new Map<string, StreamableHTTPServerTransport>();
+
+/**
+ * Validate the request against the configured shared-secret tokens. Returns true
+ * when auth is disabled (no tokens configured) or a valid token is presented via
+ * `Authorization: Bearer <token>` or `X-API-Key: <token>`. Constant-time compare.
+ */
+function isAuthorized(req: IncomingMessage): boolean {
+  const tokens = config.authTokens;
+  if (!tokens || tokens.length === 0) return true; // auth disabled
+  const auth = req.headers["authorization"];
+  const apiKey = req.headers["x-api-key"];
+  let provided = "";
+  if (typeof auth === "string" && auth.toLowerCase().startsWith("bearer ")) {
+    provided = auth.slice(7).trim();
+  } else if (typeof apiKey === "string") {
+    provided = apiKey.trim();
+  }
+  if (!provided) return false;
+  const a = Buffer.from(provided);
+  return tokens.some((t) => {
+    const b = Buffer.from(t);
+    return a.length === b.length && timingSafeEqual(a, b);
+  });
+}
 
 function readBody(req: IncomingMessage): Promise<unknown> {
   return new Promise((resolve, reject) => {
@@ -98,6 +122,20 @@ async function main(): Promise<void> {
       return;
     }
     if (path === config.httpPath) {
+      if (!isAuthorized(req)) {
+        res.writeHead(401, {
+          "Content-Type": "application/json",
+          "WWW-Authenticate": "Bearer",
+        });
+        res.end(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            error: { code: -32001, message: "Unauthorized: missing or invalid token." },
+            id: null,
+          }),
+        );
+        return;
+      }
       handleMcp(req, res).catch((err) => {
         log("request error:", (err as Error).message);
         if (!res.headersSent) res.writeHead(500).end();
@@ -109,8 +147,9 @@ async function main(): Promise<void> {
   });
 
   httpServer.listen(config.httpPort, config.httpHost, () => {
+    const auth = config.authTokens && config.authTokens.length > 0 ? "ENABLED" : "disabled";
     log(
-      `ProtonDB MCP HTTP server on http://${config.httpHost}:${config.httpPort}${config.httpPath}`,
+      `ProtonDB MCP HTTP server on http://${config.httpHost}:${config.httpPort}${config.httpPath} (auth: ${auth})`,
     );
   });
 

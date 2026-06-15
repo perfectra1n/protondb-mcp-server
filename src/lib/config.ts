@@ -65,6 +65,10 @@ export const config = {
   httpHost: envStr("PROTONDB_MCP_HTTP_HOST", "127.0.0.1"),
   httpPort: envInt("PROTONDB_MCP_HTTP_PORT", 3000),
   httpPath: envStr("PROTONDB_MCP_HTTP_PATH", "/mcp"),
+  // Optional shared-secret auth for the HTTP transport. One or more tokens
+  // (comma-separated). When unset, the HTTP endpoint is unauthenticated.
+  // Clients send `Authorization: Bearer <token>` (or `X-API-Key: <token>`).
+  authTokens: envList("PROTONDB_MCP_AUTH_TOKEN"),
   // Override the DNS-rebinding allowlist (comma-separated host[:port]). When
   // unset, loopback binds use a sensible localhost allowlist and non-loopback
   // binds disable the check.

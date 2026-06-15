@@ -13,6 +13,9 @@ services:
       PROTONDB_MCP_AUTO_UPDATE: "true"
       # Set to "true" only when using Dockerfile.playwright (Chromium present).
       PROTONDB_MCP_ENABLE_LIVE: "false"
+      # Optional: shared-secret bearer auth for the HTTP endpoint (comma-separated
+      # for multiple tokens). Unset = unauthenticated. Pair with TLS.
+      # PROTONDB_MCP_AUTH_TOKEN: ${PROTONDB_MCP_AUTH_TOKEN}
       # Optional: raises GitHub API rate limits for dump listing.
       # GITHUB_TOKEN: ${GITHUB_TOKEN}
     volumes:
