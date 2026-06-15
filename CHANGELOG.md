@@ -1,5 +1,12 @@
 # Changelog
 
+## [2026.6.2](https://github.com/perfectra1n/protondb-mcp-server/compare/v2026.6.1...v2026.6.2) (2026-06-15)
+
+
+### Features
+
+* optional shared-token auth for the HTTP transport ([abb4ec7](https://github.com/perfectra1n/protondb-mcp-server/commit/abb4ec7e123dba71f09007d74d0ffbc70a4d5e74))
+
 ## [2026.6.1](https://github.com/perfectra1n/protondb-mcp-server/compare/v2026.6.0...v2026.6.1) (2026-06-14)
 
 
