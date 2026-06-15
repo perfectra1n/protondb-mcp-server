@@ -1,5 +1,19 @@
 # Changelog
 
+## [2026.6.4](https://github.com/perfectra1n/protondb-mcp-server/compare/v2026.6.3...v2026.6.4) (2026-06-15)
+
+
+### Features
+
+* bake DB snapshot into the image (seed-on-empty start) ([efdb190](https://github.com/perfectra1n/protondb-mcp-server/commit/efdb19038f31d6f978da48df20fd3704de2860c3))
+* capture every report field; native user_version migrations ([1b6c93b](https://github.com/perfectra1n/protondb-mcp-server/commit/1b6c93bfa8708325c7812a88566b099a0f2cd06a))
+* readiness gate instead of baking the DB into the image ([3a31606](https://github.com/perfectra1n/protondb-mcp-server/commit/3a3160621e272673fe5d091f4793323cd1e6696d))
+
+
+### Bug Fixes
+
+* install build toolchain in Dockerfile.playwright so better-sqlite3 compiles ([97186e3](https://github.com/perfectra1n/protondb-mcp-server/commit/97186e347fe05ae37037520854e029396c078bf7))
+
 ## [2026.6.3](https://github.com/perfectra1n/protondb-mcp-server/compare/v2026.6.2...v2026.6.3) (2026-06-15)
 
 
