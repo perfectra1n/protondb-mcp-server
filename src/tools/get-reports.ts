@@ -34,6 +34,14 @@ const inputSchema = z.object({
     .int()
     .optional()
     .describe("Only reports at/after this Unix epoch-seconds timestamp"),
+  includeRaw: z
+    .boolean()
+    .default(false)
+    .describe(
+      "Include the complete original record (every field: all responses, per-category " +
+        "notes, full systemInfo, device/contributor) on each report. Verbose — use a " +
+        "small limit. The normalized fields already cover the common ones.",
+    ),
 });
 
 const outputSchema = z.object({
@@ -105,7 +113,9 @@ export function registerGetReports(server: McpServer): void {
       if (args.source === "live" || (args.source === "auto" && dbCount === 0)) {
         const { reports: live, error } = await tryFetchLiveReports(appId, args.limit);
         if (live.length > 0 || args.source === "live") {
-          reports = applyInMemoryFilters(live, filters).slice(0, args.limit);
+          const filtered = applyInMemoryFilters(live, filters).slice(0, args.limit);
+          // Live records always carry `raw`; drop it unless explicitly requested.
+          reports = args.includeRaw ? filtered : filtered.map(({ raw, ...rest }) => rest);
           usedSource = "live";
           if (error) note = `Live capture unavailable, returned no reports: ${error}`;
         } else if (error) {
@@ -114,7 +124,7 @@ export function registerGetReports(server: McpServer): void {
       }
 
       if (usedSource === "db") {
-        reports = getReports(db, { appId, limit: args.limit, ...filters });
+        reports = getReports(db, { appId, limit: args.limit, includeRaw: args.includeRaw, ...filters });
       }
 
       const truncated = usedSource === "db" ? dbCount > reports.length : reports.length >= args.limit;

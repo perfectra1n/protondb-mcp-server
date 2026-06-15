@@ -65,6 +65,39 @@ describe("normalizeReport", () => {
   it("returns null when there is no usable appId", () => {
     expect(normalizeReport({ responses: {} }, "dump")).toBeNull();
   });
+
+  it("captures launch options, anti-cheat, all note categories, and the raw record", () => {
+    const rec = {
+      app: { steam: { appId: "12345" }, title: "Game" },
+      responses: {
+        verdict: "yes",
+        protonVersion: "9.0-3",
+        launchOptions: "gamemoderun %command%",
+        isImpactedByAntiCheat: "no",
+        concludingNotes: "great overall",
+        notes: {
+          verdict: "Works",
+          performanceFaults: "slight stutter in town",
+          launcher: "Heroic",
+        },
+      },
+      timestamp: 5,
+      systemInfo: { gpu: "AMD RX 6800", steamRuntimeVersion: "sniper", xWindowManager: "kwin" },
+    };
+    const r = normalizeReport(rec, "dump")!;
+    expect(r.launchOptions).toBe("gamemoderun %command%");
+    expect(r.antiCheat).toBe(false);
+    // free-text blob includes per-category notes + concludingNotes, excludes launcher
+    expect(r.notes).toContain("Works");
+    expect(r.notes).toContain("slight stutter in town");
+    expect(r.notes).toContain("great overall");
+    expect(r.notes).not.toContain("Heroic");
+    // nothing is lost — raw holds the complete record incl. systemInfo extras
+    expect(r.raw).toBeTruthy();
+    expect((r.raw as any).systemInfo.steamRuntimeVersion).toBe("sniper");
+    expect((r.raw as any).systemInfo.xWindowManager).toBe("kwin");
+    expect((r.raw as any).responses.notes.launcher).toBe("Heroic");
+  });
 });
 
 describe("gpuVendor", () => {

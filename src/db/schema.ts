@@ -2,56 +2,21 @@ import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { Report } from "../lib/types.js";
+import { runMigrations } from "./migrate.js";
 
 export type DB = Database.Database;
 
 /**
- * Open (creating if needed) the SQLite database and apply the schema. Safe to
- * call repeatedly. Uses WAL for concurrent read performance.
+ * Open (creating if needed) the SQLite database and run pending migrations.
+ * Safe to call repeatedly. Uses WAL for concurrent read performance.
  */
 export function openDb(path: string): DB {
   mkdirSync(dirname(path), { recursive: true });
   const db = new Database(path);
   db.pragma("journal_mode = WAL");
   db.pragma("synchronous = NORMAL");
-  applySchema(db);
+  runMigrations(db);
   return db;
-}
-
-export function applySchema(db: DB): void {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS reports (
-      id             INTEGER PRIMARY KEY,
-      app_id         TEXT NOT NULL,
-      title          TEXT,
-      verdict        TEXT,
-      works          INTEGER,
-      notes          TEXT,
-      proton_version TEXT,
-      launcher       TEXT,
-      timestamp      INTEGER,
-      cpu            TEXT,
-      gpu            TEXT,
-      gpu_driver     TEXT,
-      kernel         TEXT,
-      os             TEXT,
-      ram            TEXT,
-      playtime_min   INTEGER,
-      source         TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_reports_app ON reports(app_id);
-    CREATE INDEX IF NOT EXISTS idx_reports_app_ts ON reports(app_id, timestamp);
-
-    CREATE VIRTUAL TABLE IF NOT EXISTS reports_fts USING fts5(
-      notes, title, proton_version, gpu, os,
-      app_id UNINDEXED, content='reports', content_rowid='id'
-    );
-
-    CREATE TABLE IF NOT EXISTS meta (
-      key   TEXT PRIMARY KEY,
-      value TEXT
-    );
-  `);
 }
 
 /** Row shape as stored in SQLite. */
@@ -64,6 +29,8 @@ export interface ReportRow {
   notes: string | null;
   proton_version: string | null;
   launcher: string | null;
+  launch_options: string | null;
+  anti_cheat: number | null;
   timestamp: number | null;
   cpu: string | null;
   gpu: string | null;
@@ -73,10 +40,31 @@ export interface ReportRow {
   ram: string | null;
   playtime_min: number | null;
   source: string;
+  raw: string | null;
 }
 
 /** Convert a stored row back into the normalized {@link Report} shape. */
-export function rowToReport(r: ReportRow): Report {
+function asObject(v: unknown): Record<string, unknown> | null {
+  return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
+}
+
+export function rowToReport(r: ReportRow, includeRaw = false): Report {
+  // Parse the stored raw record once to surface every field structurally.
+  let raw: Record<string, unknown> | null = null;
+  if (r.raw) {
+    try {
+      raw = JSON.parse(r.raw) as Record<string, unknown>;
+    } catch {
+      raw = null;
+    }
+  }
+  // Fallback systemInfo from flat columns for legacy rows that predate `raw`.
+  const systemInfo =
+    asObject(raw?.systemInfo) ??
+    (r.cpu || r.gpu || r.os
+      ? { cpu: r.cpu, gpu: r.gpu, gpuDriver: r.gpu_driver, kernel: r.kernel, os: r.os, ram: r.ram }
+      : null);
+
   return {
     appId: r.app_id,
     title: r.title,
@@ -85,6 +73,8 @@ export function rowToReport(r: ReportRow): Report {
     notes: r.notes,
     protonVersion: r.proton_version,
     launcher: r.launcher,
+    launchOptions: r.launch_options ?? null,
+    antiCheat: r.anti_cheat === null || r.anti_cheat === undefined ? null : r.anti_cheat === 1,
     timestamp: r.timestamp,
     cpu: r.cpu,
     gpu: r.gpu,
@@ -94,6 +84,11 @@ export function rowToReport(r: ReportRow): Report {
     ram: r.ram,
     playtimeMinutes: r.playtime_min,
     source: r.source === "live" ? "live" : "dump",
+    responses: asObject(raw?.responses),
+    systemInfo,
+    device: asObject(raw?.device),
+    contributor: asObject(raw?.contributor),
+    ...(includeRaw ? { raw } : {}),
   };
 }
 
@@ -105,15 +100,15 @@ export function rowToReport(r: ReportRow): Report {
 export function makeInserter(db: DB): (rep: Report) => void {
   const insert = db.prepare(`
     INSERT INTO reports
-      (app_id, title, verdict, works, notes, proton_version, launcher, timestamp,
-       cpu, gpu, gpu_driver, kernel, os, ram, playtime_min, source)
+      (app_id, title, verdict, works, notes, proton_version, launcher, launch_options,
+       anti_cheat, timestamp, cpu, gpu, gpu_driver, kernel, os, ram, playtime_min, source, raw)
     VALUES
-      (@app_id, @title, @verdict, @works, @notes, @proton_version, @launcher, @timestamp,
-       @cpu, @gpu, @gpu_driver, @kernel, @os, @ram, @playtime_min, @source)
+      (@app_id, @title, @verdict, @works, @notes, @proton_version, @launcher, @launch_options,
+       @anti_cheat, @timestamp, @cpu, @gpu, @gpu_driver, @kernel, @os, @ram, @playtime_min, @source, @raw)
   `);
   const insertFts = db.prepare(
-    `INSERT INTO reports_fts(rowid, notes, title, proton_version, gpu, os, app_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO reports_fts(rowid, notes, title, proton_version, gpu, os, launch_options, app_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   return (rep: Report) => {
     const info = insert.run({
@@ -124,6 +119,8 @@ export function makeInserter(db: DB): (rep: Report) => void {
       notes: rep.notes,
       proton_version: rep.protonVersion,
       launcher: rep.launcher,
+      launch_options: rep.launchOptions,
+      anti_cheat: rep.antiCheat === null || rep.antiCheat === undefined ? null : rep.antiCheat ? 1 : 0,
       timestamp: rep.timestamp,
       cpu: rep.cpu,
       gpu: rep.gpu,
@@ -133,6 +130,7 @@ export function makeInserter(db: DB): (rep: Report) => void {
       ram: rep.ram,
       playtime_min: rep.playtimeMinutes,
       source: rep.source,
+      raw: rep.raw ? JSON.stringify(rep.raw) : null,
     });
     insertFts.run(
       info.lastInsertRowid,
@@ -141,6 +139,7 @@ export function makeInserter(db: DB): (rep: Report) => void {
       rep.protonVersion ?? "",
       rep.gpu ?? "",
       rep.os ?? "",
+      rep.launchOptions ?? "",
       rep.appId,
     );
   };

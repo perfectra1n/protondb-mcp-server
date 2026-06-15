@@ -20,6 +20,8 @@ function rep(p: Partial<Report>): Report {
     notes: null,
     protonVersion: "GE-Proton9-1",
     launcher: null,
+    launchOptions: null,
+    antiCheat: null,
     timestamp: 100,
     cpu: null,
     gpu: "NVIDIA RTX 4080",

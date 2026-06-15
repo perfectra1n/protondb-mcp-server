@@ -27,6 +27,10 @@ export interface Analysis {
   topProtonVersions: Count[];
   /** Proton versions ranked by working-report count (what tends to work). */
   bestProtonVersions: Count[];
+  /** Launch options/flags ranked by usage among *working* reports. */
+  bestLaunchOptions: Count[];
+  /** How many reports flagged the game as impacted by anti-cheat. */
+  antiCheatReports: number;
   /** GPU vendor split. */
   gpuVendors: Count[];
   /** Most common distros/OSes among reports. */
@@ -68,6 +72,8 @@ export function analyzeReports(
 
   const working = reports.filter((r) => r.works === true);
   const bestProtonVersions = tally(working, (r) => r.protonVersion, 8);
+  const bestLaunchOptions = tally(working, (r) => r.launchOptions, 8);
+  const antiCheatReports = reports.filter((r) => r.antiCheat === true).length;
 
   const noteSamples: NoteSample[] = reports
     .filter((r) => r.notes && r.notes.trim().length > 0)
@@ -93,6 +99,8 @@ export function analyzeReports(
     workingRate: yes + no > 0 ? yes / (yes + no) : null,
     topProtonVersions: tally(reports, (r) => r.protonVersion, 8),
     bestProtonVersions,
+    bestLaunchOptions,
+    antiCheatReports,
     gpuVendors: tally(reports, (r) => gpuVendor(r.gpu), 5),
     topDistros: tally(reports, (r) => r.os, 6),
     noteSamples,

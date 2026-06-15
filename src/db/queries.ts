@@ -13,6 +13,8 @@ export interface ReportFilters {
   gpuContains?: string;
   /** Only reports at or after this unix-epoch-seconds timestamp. */
   since?: number;
+  /** Include the complete original record (`raw`) on each report. */
+  includeRaw?: boolean;
 }
 
 /** Number of reports stored for a given appId. */
@@ -50,7 +52,7 @@ export function getReports(db: DB, f: ReportFilters): Report[] {
        ORDER BY timestamp DESC NULLS LAST LIMIT ${limit}`,
     )
     .all(params) as ReportRow[];
-  return rows.map(rowToReport);
+  return rows.map((r) => rowToReport(r, f.includeRaw ?? false));
 }
 
 /**
@@ -72,7 +74,7 @@ export function toFtsQuery(input: string): string | null {
 export function searchReports(
   db: DB,
   query: string,
-  opts: { appId?: string; limit?: number } = {},
+  opts: { appId?: string; limit?: number; includeRaw?: boolean } = {},
 ): Report[] {
   const ftsQuery = toFtsQuery(query);
   if (!ftsQuery) return [];
@@ -86,7 +88,7 @@ export function searchReports(
        ORDER BY rank LIMIT ${limit}`,
     )
     .all({ query: ftsQuery, appId: opts.appId }) as ReportRow[];
-  return rows.map(rowToReport);
+  return rows.map((r) => rowToReport(r, opts.includeRaw ?? false));
 }
 
 /** Total report count across the whole DB. */

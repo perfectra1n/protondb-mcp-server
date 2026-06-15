@@ -95,7 +95,15 @@ Individual community reports for a game, with server-side filters.
 - `limit` (int, default 50, max 500)
 - `verdict` (`yes` | `no`), `protonVersionContains` (string), `gpuContains` (string),
   `since` (unix epoch seconds)
+- `includeRaw` (bool, default false) — also attach the complete verbatim original record
 - → `{ appId, name, source, count, truncated, note?, reports: [...] }`
+
+Every report includes the indexed flat fields **plus** the full structured `responses`
+(all faults, `installs`/`opens`/`startsPlay`, `frameRate`, `batteryPerformance`,
+per-category notes, `verdictOob`/`triedOob`, `type`/`variant`, multiplayer appraisals,
+`launchOptions`, …), `systemInfo` (incl. `steamRuntimeVersion`, `xWindowManager`), and
+`device`/`contributor` when present — so no field is lost. `includeRaw` adds the byte-for-byte
+original on top.
 
 ### `analyze_compatibility` — start here
 Aggregate a game's reports into patterns.
@@ -222,13 +230,17 @@ The repo ships two images:
 ```bash
 # Default image via compose (recommended): builds, runs, persists the DB on a volume.
 docker compose up --build
-# Health:       curl http://localhost:3000/health
+# Liveness:     curl http://localhost:3000/health   (always 200 while running)
+# Readiness:    curl http://localhost:3000/ready    (200 only once the DB has data)
 # MCP endpoint: http://localhost:3000/mcp
 ```
 
 On first boot the container **auto-ingests the newest dump** into the mounted volume
 (`/app/data`); restarts reuse it (no re-download). With an empty volume this fetches and
-ingests ~370k+ reports (tens of seconds).
+ingests ~370k+ reports (tens of seconds). Wire `/ready` as the pod **readiness probe** and
+`/health` as the **liveness probe**, so a fresh (empty) deployment isn't routed traffic
+until that first ingest finishes — no empty-DB window, and the image stays slim (the DB
+lives on the volume, not baked in).
 
 Full image with live capture:
 
@@ -314,6 +326,22 @@ On startup (non-blocking) and every `PROTONDB_MCP_UPDATE_INTERVAL_HOURS`, the se
    the current month, **and** it's on/after the 1st (the monthly upload has landed).
 3. Builds the new DB on the same filesystem as the live DB and **atomically renames** it
    in, so in-flight reads are unaffected.
+
+## Schema & migrations
+
+The database is **disposable** — it's rebuilt from the upstream dump, never hand-edited —
+so migrations are simple:
+
+- **Structure** is versioned with SQLite's native `PRAGMA user_version` via a tiny ordered
+  migration runner (`src/db/migrate.ts`). A fresh DB is created at the current version and
+  stamped; append a migration to evolve it.
+- **Field extraction** is versioned separately as `EXTRACTION_VERSION` (stored in meta as
+  `data_version`). When we change *which* fields are captured, we bump it; on the next
+  start the auto-updater sees the DB's `data_version` is behind and **re-ingests** to
+  backfill the new fields. So **deploying a new version auto-migrates running deployments**
+  on their own — no manual migration step. (To force it immediately, delete the volume's
+  `protondb.db` or run `pnpm ingest`.) Reads of an older DB during the brief rebuild window
+  are defensive (missing columns read as null).
 
 ## CI/CD, versioning & releases
 

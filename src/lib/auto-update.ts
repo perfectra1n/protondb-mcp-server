@@ -4,6 +4,7 @@ import { config } from "./config.js";
 import { log } from "./http.js";
 import { getDb, swapDb } from "../db/store.js";
 import { getMeta } from "../db/schema.js";
+import { EXTRACTION_VERSION } from "../db/migrate.js";
 import { totalReports } from "../db/queries.js";
 import { latestDump, type DumpInfo } from "../sources/dump-registry.js";
 import { ingestToDb } from "../scripts/ingest.js";
@@ -16,6 +17,8 @@ export interface StalenessInput {
   /** year/month of the currently-ingested dump, or null. */
   ingestedYearMonth: { year: number; month: number } | null;
   latest: DumpInfo | null;
+  /** True when the DB was built by an older schema and needs a rebuild. */
+  schemaOutdated?: boolean;
 }
 
 export interface StalenessDecision {
@@ -33,6 +36,11 @@ export function shouldUpdate(i: StalenessInput): StalenessDecision {
   if (!i.latest) return { update: false, reason: "no upstream dump available" };
   if (!i.hasData || i.ingestedSortKey === null) {
     return { update: true, reason: "local database is empty (bootstrap)" };
+  }
+  // A schema upgrade requires re-ingesting to capture newly-extracted fields,
+  // regardless of dump recency.
+  if (i.schemaOutdated) {
+    return { update: true, reason: "schema upgrade — rebuilding to capture new fields" };
   }
   const newer = i.latest.sortKey > i.ingestedSortKey;
   if (!newer) return { update: false, reason: "local data is already the newest dump" };
@@ -81,6 +89,7 @@ export async function runAutoUpdate(now: Date = new Date()): Promise<boolean> {
     const db = getDb();
     const hasData = totalReports(db) > 0;
     const parsed = parseDumpDateMeta(getMeta(db, "dump_date"));
+    const schemaOutdated = Number(getMeta(db, "data_version") ?? 0) < EXTRACTION_VERSION;
     const latest = await latestDump();
     const decision = shouldUpdate({
       now,
@@ -88,6 +97,7 @@ export async function runAutoUpdate(now: Date = new Date()): Promise<boolean> {
       ingestedSortKey: parsed?.sortKey ?? null,
       ingestedYearMonth: parsed ? { year: parsed.year, month: parsed.month } : null,
       latest,
+      schemaOutdated,
     });
     log("auto-update decision:", JSON.stringify(decision));
     if (!decision.update || !latest) return false;

@@ -68,6 +68,18 @@ describe("shouldUpdate", () => {
     expect(d.update).toBe(false);
   });
 
+  it("forces a rebuild when the data-extraction version is outdated", () => {
+    const d = shouldUpdate({
+      now: new Date("2026-06-20T00:00:00Z"),
+      hasData: true,
+      ingestedSortKey: 20260601, // already newest dump
+      ingestedYearMonth: { year: 2026, month: 6 },
+      latest: dump(2026, 6, 1),
+      schemaOutdated: true,
+    });
+    expect(d.update).toBe(true);
+  });
+
   it("does nothing when upstream listing failed", () => {
     const d = shouldUpdate({
       now: new Date("2026-06-20T00:00:00Z"),

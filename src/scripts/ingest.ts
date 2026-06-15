@@ -14,6 +14,7 @@ import { config } from "../lib/config.js";
 import { httpFetch, log } from "../lib/http.js";
 import { normalizeReport } from "../lib/normalize.js";
 import { openDb, makeInserter, setMeta } from "../db/schema.js";
+import { EXTRACTION_VERSION } from "../db/migrate.js";
 import { latestDump, findDump, type DumpInfo } from "../sources/dump-registry.js";
 
 const JSON_ENTRY = "reports_piiremoved.json";
@@ -132,6 +133,7 @@ export async function ingestToDb(
     if (dumpDate) setMeta(db, "dump_date", dumpDate);
     setMeta(db, "record_count", String(count));
     setMeta(db, "ingested_at", new Date().toISOString());
+    setMeta(db, "data_version", String(EXTRACTION_VERSION));
     // Fold the WAL back into the main file so the DB is a single self-contained
     // file that can be atomically renamed into place (see auto-update swap).
     db.pragma("wal_checkpoint(TRUNCATE)");

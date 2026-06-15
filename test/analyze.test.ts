@@ -11,6 +11,8 @@ function rep(p: Partial<Report>): Report {
     notes: null,
     protonVersion: null,
     launcher: null,
+    launchOptions: null,
+    antiCheat: null,
     timestamp: null,
     cpu: null,
     gpu: null,

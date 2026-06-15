@@ -46,6 +46,8 @@ const outputSchema = z.object({
   workingRate: z.number().nullable(),
   topProtonVersions: z.array(CountSchema),
   bestProtonVersions: z.array(CountSchema),
+  bestLaunchOptions: z.array(CountSchema),
+  antiCheatReports: z.number(),
   gpuVendors: z.array(CountSchema),
   topDistros: z.array(CountSchema),
   noteSamples: z.array(
@@ -117,6 +119,8 @@ export function registerAnalyzeCompatibility(server: McpServer): void {
         `${summary?.total ? ` (${summary.total} total reports)` : ""}\n` +
         `Analyzed ${analysis.totalReports} report(s)${dbTotal > analysis.totalReports ? ` of ${dbTotal} in DB` : ""}; working rate ${pct}.\n` +
         `Best Proton versions: ${analysis.bestProtonVersions.slice(0, 3).map((v) => `${v.key} (${v.workingCount} ok)`).join(", ") || "n/a"}\n` +
+        `Common launch options (working): ${analysis.bestLaunchOptions.slice(0, 3).map((v) => `${v.key} (${v.workingCount})`).join(", ") || "none reported"}\n` +
+        `Anti-cheat-impacted reports: ${analysis.antiCheatReports}\n` +
         `GPU vendors: ${analysis.gpuVendors.map((v) => `${v.key} ${v.count}`).join(", ") || "n/a"}`;
 
       return {
