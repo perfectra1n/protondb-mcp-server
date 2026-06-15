@@ -5,6 +5,10 @@
 FROM mcr.microsoft.com/playwright:v1.60.0-noble AS builder
 WORKDIR /app
 RUN corepack enable
+# The Playwright base image lacks a C/C++ toolchain; better-sqlite3 needs it.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends python3 make g++ ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY tsconfig.json ./
