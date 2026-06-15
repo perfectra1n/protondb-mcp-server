@@ -47,6 +47,10 @@ function envFirst(...keys: string[]): string | undefined {
 export const config = {
   // Storage
   dbPath: resolve(envStr("PROTONDB_MCP_DB", "./data/protondb.db")),
+  // Read-only DB snapshot baked into the image. On startup, if the live DB is
+  // missing/empty it is copied from here so the server has data immediately
+  // (no cold-start ingest). Ignored if the file doesn't exist (e.g. local dev).
+  seedDbPath: envStr("PROTONDB_MCP_SEED_DB", "/app/seed/protondb.db"),
 
   // Outbound HTTP
   userAgent: envStr(

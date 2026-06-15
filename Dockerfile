@@ -13,6 +13,15 @@ RUN pnpm install --frozen-lockfile
 COPY tsconfig.json ./
 COPY src ./src
 RUN pnpm build
+# Bake a DB snapshot into the image so the server has data immediately on first
+# start (no cold-start ingest). Defaults to the newest dump; override with
+# --build-arg SEED_DUMP=reports_<mon><n>_<year>.tar.gz, or SEED_DUMP=none to skip.
+ARG SEED_DUMP=
+RUN mkdir -p /app/seed \
+  && if [ "$SEED_DUMP" != "none" ]; then \
+       PROTONDB_MCP_DB=/app/seed/protondb.db PROTONDB_MCP_AUTO_UPDATE=false \
+       node dist/scripts/ingest.js ${SEED_DUMP:+--dump "$SEED_DUMP"}; \
+     fi
 RUN pnpm prune --prod
 
 # ---- runtime ----
@@ -26,7 +35,9 @@ ENV NODE_ENV=production \
     PROTONDB_MCP_AUTO_UPDATE=true
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/seed ./seed
 COPY package.json ./
+ENV PROTONDB_MCP_SEED_DB=/app/seed/protondb.db
 RUN mkdir -p /app/data \
   && useradd --create-home --uid 10001 app \
   && chown -R app:app /app

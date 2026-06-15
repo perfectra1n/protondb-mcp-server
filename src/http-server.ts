@@ -7,7 +7,7 @@ import { buildServer } from "./server.js";
 import { config } from "./lib/config.js";
 import { startAutoUpdate, stopAutoUpdate } from "./lib/auto-update.js";
 import { closeBrowser } from "./sources/protondb-live.js";
-import { closeDb } from "./db/store.js";
+import { closeDb, seedIfEmpty } from "./db/store.js";
 import { log } from "./lib/http.js";
 
 const transports = new Map<string, StreamableHTTPServerTransport>();
@@ -108,6 +108,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse): Promise<voi
 }
 
 async function main(): Promise<void> {
+  seedIfEmpty();
   startAutoUpdate();
 
   const httpServer = createServer((req, res) => {
