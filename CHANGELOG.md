@@ -1,5 +1,12 @@
 # Changelog
 
+## [2026.6.5](https://github.com/perfectra1n/protondb-mcp-server/compare/v2026.6.4...v2026.6.5) (2026-06-15)
+
+
+### Bug Fixes
+
+* tidy http-server entrypoint (force release of recent prompt/field changes) ([edec851](https://github.com/perfectra1n/protondb-mcp-server/commit/edec85131cb27d27e18e141cf5618bc2370cc49e))
+
 ## [2026.6.4](https://github.com/perfectra1n/protondb-mcp-server/compare/v2026.6.3...v2026.6.4) (2026-06-15)
 
 
