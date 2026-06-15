@@ -1,5 +1,12 @@
 # Changelog
 
+## [2026.6.6](https://github.com/perfectra1n/protondb-mcp-server/compare/v2026.6.5...v2026.6.6) (2026-06-15)
+
+
+### Features
+
+* refactor ([8ffe324](https://github.com/perfectra1n/protondb-mcp-server/commit/8ffe3245d36ef06461579e0c6b49d61e37d0725b))
+
 ## [2026.6.5](https://github.com/perfectra1n/protondb-mcp-server/compare/v2026.6.4...v2026.6.5) (2026-06-15)
 
 
