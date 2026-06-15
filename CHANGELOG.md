@@ -1,5 +1,12 @@
 # Changelog
 
+## [2026.6.3](https://github.com/perfectra1n/protondb-mcp-server/compare/v2026.6.2...v2026.6.3) (2026-06-15)
+
+
+### Bug Fixes
+
+* search_games crashed on null/non-numeric Algolia fields ([8ec6cc8](https://github.com/perfectra1n/protondb-mcp-server/commit/8ec6cc8841b09e449b069895b71bc912dee84d9a))
+
 ## [2026.6.2](https://github.com/perfectra1n/protondb-mcp-server/compare/v2026.6.1...v2026.6.2) (2026-06-15)
 
 
