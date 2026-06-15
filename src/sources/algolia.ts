@@ -4,14 +4,32 @@ import type { GameHit } from "../lib/types.js";
 
 interface AlgoliaHit {
   objectID: string;
-  name?: string;
-  oslist?: string[];
-  tags?: string[];
-  userScore?: number;
-  releaseYear?: number;
+  name?: unknown;
+  oslist?: unknown;
+  tags?: unknown;
+  // Algolia returns these loosely typed: userScore can be null, and releaseYear
+  // can be a string like "Soon" or "2026" as well as a number.
+  userScore?: unknown;
+  releaseYear?: unknown;
 }
 interface AlgoliaResponse {
   hits: AlgoliaHit[];
+}
+
+/** Coerce an unknown value to a finite number, or undefined. */
+export function toNumber(v: unknown): number | undefined {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v))) {
+    return Number(v);
+  }
+  return undefined;
+}
+
+/** Coerce an unknown value to a string array (of strings), or undefined. */
+function toStringArray(v: unknown): string[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  const arr = v.filter((x): x is string => typeof x === "string");
+  return arr.length > 0 ? arr : undefined;
 }
 
 /**
@@ -49,14 +67,17 @@ export async function searchAlgolia(query: string, limit: number): Promise<GameH
     cacheTtlMs: 10 * 60_000,
     retries: 1,
   });
-  return data.hits.map((h) => ({
-    appId: h.objectID,
-    name: h.name ?? "(unknown)",
-    oslist: h.oslist,
-    tags: h.tags?.slice(0, 12),
-    userScore: h.userScore,
-    releaseYear: h.releaseYear,
-    nativeLinux: h.oslist?.some((o) => /linux|steamos/i.test(o)) ?? undefined,
-    source: "algolia" as const,
-  }));
+  return data.hits.map((h) => {
+    const oslist = toStringArray(h.oslist);
+    return {
+      appId: h.objectID,
+      name: typeof h.name === "string" ? h.name : "(unknown)",
+      oslist,
+      tags: toStringArray(h.tags)?.slice(0, 12),
+      userScore: toNumber(h.userScore),
+      releaseYear: toNumber(h.releaseYear),
+      nativeLinux: oslist?.some((o) => /linux|steamos/i.test(o)) ?? undefined,
+      source: "algolia" as const,
+    };
+  });
 }

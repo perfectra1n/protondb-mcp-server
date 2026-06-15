@@ -13,14 +13,16 @@ const inputSchema = z.object({
     .describe("Maximum number of candidate games to return"),
 });
 
-const GameHitSchema = z.object({
+// Fields beyond appId/name/source are best-effort and upstream-shaped, so they
+// are tolerant (nullish) — a stray null/missing value must never fail the tool.
+export const GameHitSchema = z.object({
   appId: z.string(),
   name: z.string(),
-  oslist: z.array(z.string()).optional(),
-  tags: z.array(z.string()).optional(),
-  userScore: z.number().optional(),
-  releaseYear: z.number().optional(),
-  nativeLinux: z.boolean().optional(),
+  oslist: z.array(z.string()).nullish(),
+  tags: z.array(z.string()).nullish(),
+  userScore: z.number().nullish(),
+  releaseYear: z.number().nullish(),
+  nativeLinux: z.boolean().nullish(),
   source: z.enum(["algolia", "steam"]),
 });
 
