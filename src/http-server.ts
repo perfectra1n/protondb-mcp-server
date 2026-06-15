@@ -175,6 +175,9 @@ async function main(): Promise<void> {
   process.on("SIGTERM", shutdown);
 }
 
+
+
+
 main().catch((err) => {
   log("fatal:", (err as Error).message);
   process.exit(1);
