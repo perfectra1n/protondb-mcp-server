@@ -1,5 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
-import { dirname } from "node:path";
+import { existsSync, renameSync, rmSync } from "node:fs";
 import { config } from "../lib/config.js";
 import { log } from "../lib/http.js";
 import { openDb, type DB } from "./schema.js";
@@ -7,51 +6,23 @@ import { totalReports } from "./queries.js";
 
 let db: DB | null = null;
 
-/**
- * Pure helper: copy `seedPath` to `dbPath` when the target DB is missing or has
- * no reports. Returns true if a copy happened. Does not touch the shared
- * connection — callers must close it first if it points at `dbPath`.
- */
-export function seedDatabaseFile(seedPath: string, dbPath: string): boolean {
-  if (!seedPath || seedPath === dbPath || !existsSync(seedPath)) return false;
-
-  if (existsSync(dbPath)) {
-    try {
-      const probe = openDb(dbPath);
-      const n = totalReports(probe);
-      probe.close();
-      if (n > 0) return false; // already populated — keep it
-    } catch {
-      // unreadable/corrupt — fall through and reseed
-    }
-  }
-
-  mkdirSync(dirname(dbPath), { recursive: true });
-  for (const suffix of ["", "-wal", "-shm"]) {
-    const p = dbPath + suffix;
-    if (existsSync(p)) rmSync(p, { force: true });
-  }
-  copyFileSync(seedPath, dbPath);
-  return true;
-}
-
-/**
- * If a baked seed snapshot exists and the live DB is missing or empty, copy the
- * seed into place so the server serves data immediately (no cold-start ingest).
- * No-op when the live DB already has reports, or when no seed is present.
- * Call once at startup before getDb()/auto-update.
- */
-export function seedIfEmpty(): void {
-  closeDb();
-  if (seedDatabaseFile(config.seedDbPath, config.dbPath)) {
-    log("seeded database from baked snapshot:", config.seedDbPath);
-  }
-}
-
 /** Get (lazily opening) the shared database connection. */
 export function getDb(): DB {
   if (!db) db = openDb(config.dbPath);
   return db;
+}
+
+/**
+ * Readiness: true once the database has at least one report. Used by the HTTP
+ * /ready probe so the pod isn't marked Ready (and routed traffic) until the
+ * first-boot ingest has populated an otherwise-empty database. Never throws.
+ */
+export function isReady(): boolean {
+  try {
+    return totalReports(getDb()) > 0;
+  } catch {
+    return false;
+  }
 }
 
 /** Close the shared connection if open. */

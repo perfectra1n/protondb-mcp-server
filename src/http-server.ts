@@ -7,7 +7,7 @@ import { buildServer } from "./server.js";
 import { config } from "./lib/config.js";
 import { startAutoUpdate, stopAutoUpdate } from "./lib/auto-update.js";
 import { closeBrowser } from "./sources/protondb-live.js";
-import { closeDb, seedIfEmpty } from "./db/store.js";
+import { closeDb, isReady } from "./db/store.js";
 import { log } from "./lib/http.js";
 
 const transports = new Map<string, StreamableHTTPServerTransport>();
@@ -108,7 +108,6 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse): Promise<voi
 }
 
 async function main(): Promise<void> {
-  seedIfEmpty();
   startAutoUpdate();
 
   const httpServer = createServer((req, res) => {
@@ -117,9 +116,19 @@ async function main(): Promise<void> {
       return;
     }
     const path = req.url.split("?")[0];
+    // Liveness: process is up. Always 200 (don't let the bootstrap ingest get
+    // the pod killed).
     if (path === "/health") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ status: "ok" }));
+      return;
+    }
+    // Readiness: only 200 once the DB has data, so a fresh (empty) deployment
+    // isn't routed traffic until the first ingest completes.
+    if (path === "/ready") {
+      const ready = isReady();
+      res.writeHead(ready ? 200 : 503, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ready }));
       return;
     }
     if (path === config.httpPath) {

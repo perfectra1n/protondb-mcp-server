@@ -3,12 +3,11 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { buildServer } from "./server.js";
 import { startAutoUpdate, stopAutoUpdate } from "./lib/auto-update.js";
 import { closeBrowser } from "./sources/protondb-live.js";
-import { closeDb, seedIfEmpty } from "./db/store.js";
+import { closeDb } from "./db/store.js";
 import { log } from "./lib/http.js";
 
 async function main(): Promise<void> {
   const server = buildServer();
-  seedIfEmpty();
   startAutoUpdate();
 
   const transport = new StdioServerTransport();
