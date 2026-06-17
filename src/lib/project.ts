@@ -15,12 +15,7 @@ import type { Report } from "./types.js";
  */
 
 /** Heavy nested passthrough fields — excluded from the compact default. */
-export const NESTED_FIELDS: (keyof Report)[] = [
-  "responses",
-  "systemInfo",
-  "device",
-  "contributor",
-];
+export const NESTED_FIELDS: (keyof Report)[] = ["responses", "systemInfo", "device", "contributor"];
 
 /** Every Report key. Keep in sync with ReportSchema in types.ts. */
 export const ALL_FIELDS: (keyof Report)[] = [

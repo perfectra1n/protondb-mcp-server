@@ -60,10 +60,7 @@ export const ReportSchema = z.object({
     .nullable()
     .optional()
     .describe("Reporter playtime in minutes (live reports only)"),
-  source: z
-    .enum(["dump", "live"])
-    .optional()
-    .describe("Where this normalized report came from"),
+  source: z.enum(["dump", "live"]).optional().describe("Where this normalized report came from"),
   // Full structured passthroughs so EVERY field is available, not just the
   // indexed/flat ones above. Returned only when requested (detail='full' or a
   // `fields` projection naming them) — they dominate response size otherwise.

@@ -89,7 +89,5 @@ export function scoreProfileMatch(report: Report, profile: SystemProfile): numbe
 export function rankByProfile(reports: Report[], profile: SystemProfile): Report[] {
   return reports
     .map((r) => ({ ...r, profileScore: scoreProfileMatch(r, profile) }))
-    .sort(
-      (a, b) => b.profileScore - a.profileScore || (b.timestamp ?? 0) - (a.timestamp ?? 0),
-    );
+    .sort((a, b) => b.profileScore - a.profileScore || (b.timestamp ?? 0) - (a.timestamp ?? 0));
 }

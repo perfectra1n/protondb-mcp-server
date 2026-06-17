@@ -287,10 +287,10 @@ Everything is configurable via env. Defaults in parentheses.
 
 ### Storage
 
-| Variable                        | Default              | Description                                                                                                                            |
-| ------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `PROTONDB_MCP_DB`               | `./data/protondb.db` | SQLite database path.                                                                                                                  |
-| `PROTONDB_MCP_MAX_RESPONSE_CHARS` | `30000`            | Soft byte budget for `get_reports`/`search_reports`. Reports are projected then trimmed to this many chars; the response says how many were dropped. |
+| Variable                          | Default              | Description                                                                                                                                          |
+| --------------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PROTONDB_MCP_DB`                 | `./data/protondb.db` | SQLite database path.                                                                                                                                |
+| `PROTONDB_MCP_MAX_RESPONSE_CHARS` | `30000`              | Soft byte budget for `get_reports`/`search_reports`. Reports are projected then trimmed to this many chars; the response says how many were dropped. |
 
 ### HTTP transport (`http-server.js`)
 

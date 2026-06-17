@@ -44,9 +44,7 @@ describe("scoreProfileMatch", () => {
       os: "Ubuntu 24.04",
       systemInfo: { xWindowManager: "X11" },
     });
-    expect(scoreProfileMatch(match, profile)).toBeGreaterThan(
-      scoreProfileMatch(mismatch, profile),
-    );
+    expect(scoreProfileMatch(match, profile)).toBeGreaterThan(scoreProfileMatch(mismatch, profile));
   });
 
   it("an empty profile scores zero", () => {
