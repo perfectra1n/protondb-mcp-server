@@ -1,5 +1,12 @@
 # Changelog
 
+## [2026.6.8](https://github.com/perfectra1n/protondb-mcp-server/compare/v2026.6.7...v2026.6.8) (2026-06-17)
+
+
+### Features
+
+* **tools:** enrich analysis with OOB rate, faults, launchers, WMs ([1fca50e](https://github.com/perfectra1n/protondb-mcp-server/commit/1fca50ee43aecb609a885a5f96e588423ff78b47))
+
 ## [2026.6.7](https://github.com/perfectra1n/protondb-mcp-server/compare/v2026.6.6...v2026.6.7) (2026-06-17)
 
 
