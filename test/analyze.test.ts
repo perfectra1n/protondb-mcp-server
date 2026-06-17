@@ -96,4 +96,19 @@ describe("analyzeReports", () => {
     expect(a.totalReports).toBe(0);
     expect(a.workingRate).toBeNull();
   });
+
+  it("extracts and ranks env-var assignments from working reports' launch options", () => {
+    const withEnv: Report[] = [
+      rep({ works: true, launchOptions: "PROTON_USE_WINED3D=1 DXVK_HUD=fps %command%" }),
+      rep({ works: true, launchOptions: "PROTON_USE_WINED3D=1 gamemoderun %command%" }),
+      rep({ works: false, launchOptions: "RADV_PERFTEST=gpl %command%" }),
+    ];
+    const a = analyzeReports("1", withEnv, null);
+    const env = Object.fromEntries(a.bestEnvVars.map((c) => [c.key, c.workingCount]));
+    // PROTON_USE_WINED3D=1 appears in two working reports.
+    expect(env["PROTON_USE_WINED3D=1"]).toBe(2);
+    expect(env["DXVK_HUD=fps"]).toBe(1);
+    // `gamemoderun` is a command, not an env var — must not be captured.
+    expect(a.bestEnvVars.some((c) => c.key.includes("gamemoderun"))).toBe(false);
+  });
 });

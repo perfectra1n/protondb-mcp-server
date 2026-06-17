@@ -67,6 +67,13 @@ export const config = {
   // Logging verbosity: error | warn | info | debug (anything else => info).
   logLevel: envStr("PROTONDB_MCP_LOG_LEVEL", "info"),
 
+  // Soft byte budget for report-bearing responses (get_reports / search_reports).
+  // Reports are projected, then trimmed to this many characters of serialized
+  // JSON so a large result set never blows the MCP host's token limit and gets
+  // dumped to disk. The response reports how many were dropped. ~30 KB keeps a
+  // typical batch well under a 25k-token tool-result cap.
+  maxResponseChars: envInt("PROTONDB_MCP_MAX_RESPONSE_CHARS", 30_000),
+
   // Streamable HTTP transport (http-server.ts)
   httpHost: envStr("PROTONDB_MCP_HTTP_HOST", "127.0.0.1"),
   httpPort: envInt("PROTONDB_MCP_HTTP_PORT", 3000),

@@ -112,6 +112,28 @@ describe("db schema + queries", () => {
     expect(searchReports(db, "   ").length).toBe(0);
   });
 
+  it("matches ANY keyword by default but ALL with match:'all'", () => {
+    const insert = makeInserter(db);
+    insert(rep({ notes: "vulkan renderer works great" }));
+    insert(rep({ notes: "dx11 has bad stutter on launch" }));
+
+    // No single report contains all three tokens.
+    expect(searchReports(db, "vulkan dx11 stutter", { match: "all" }).length).toBe(0);
+    // Default "any" finds both, relevance-ranked.
+    expect(searchReports(db, "vulkan dx11 stutter").length).toBe(2);
+    expect(searchReports(db, "vulkan dx11 stutter", { match: "any" }).length).toBe(2);
+  });
+
+  it("sorts search results by recency when sort:'recent'", () => {
+    const insert = makeInserter(db);
+    insert(rep({ notes: "vulkan old report", timestamp: 100 }));
+    insert(rep({ notes: "vulkan new report", timestamp: 300 }));
+    insert(rep({ notes: "vulkan mid report", timestamp: 200 }));
+
+    const recent = searchReports(db, "vulkan", { sort: "recent" });
+    expect(recent.map((r) => r.timestamp)).toEqual([300, 200, 100]);
+  });
+
   it("stores and reads meta", () => {
     setMeta(db, "dump_file", "reports_jun1_2026.tar.gz");
     expect(getMeta(db, "dump_file")).toBe("reports_jun1_2026.tar.gz");

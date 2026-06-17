@@ -5,6 +5,9 @@ import { getReports, countReports } from "../db/queries.js";
 import { tryFetchLiveReports } from "../sources/protondb-live.js";
 import { withResolvedAppId, textResult } from "./result.js";
 import { ReportSchema, type Report } from "../lib/types.js";
+import { projectAndFit } from "../lib/project.js";
+import { SystemProfileSchema, rankByProfile } from "../lib/profile.js";
+import { config } from "../lib/config.js";
 
 const inputSchema = z.object({
   appId: z.string().optional().describe("Steam application id (preferred)"),
@@ -34,14 +37,33 @@ const inputSchema = z.object({
     .int()
     .optional()
     .describe("Only reports at/after this Unix epoch-seconds timestamp"),
+  detail: z
+    .enum(["compact", "full"])
+    .default("compact")
+    .describe(
+      "Response detail. 'compact' (default) returns only the flat fields " +
+        "(verdict, works, protonVersion, launcher, launchOptions, antiCheat, " +
+        "gpu/cpu/os/kernel/ram, notes, timestamp). 'full' ADDS the heavy nested blobs " +
+        "(responses, systemInfo, device, contributor). Prefer compact + a `fields` " +
+        "projection; only go 'full' when you truly need per-category faults or systemInfo.",
+    ),
+  fields: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "Exact field projection — return ONLY these keys (appId is always included). " +
+        "Overrides `detail`. Use this to slash response size, e.g. " +
+        '["verdict","launchOptions","protonVersion","gpu","notes"]. Valid keys are any ' +
+        "Report field, including the nested 'responses'/'systemInfo'/'device'/'contributor'/'raw'.",
+    ),
   includeRaw: z
     .boolean()
     .default(false)
     .describe(
-      "Include the complete original record (every field: all responses, per-category " +
-        "notes, full systemInfo, device/contributor) on each report. Verbose — use a " +
-        "small limit. The normalized fields already cover the common ones.",
+      "Add the complete verbatim original record (`raw`) to each report, on top of " +
+        "whatever `detail`/`fields` selected. Very large — use a small limit.",
     ),
+  systemProfile: SystemProfileSchema.optional(),
 });
 
 const outputSchema = z.object({
@@ -50,7 +72,9 @@ const outputSchema = z.object({
   source: z.enum(["db", "live"]),
   count: z.number(),
   truncated: z.boolean(),
-  /** Set when live capture was attempted but failed/returned nothing. */
+  /** How many reports were dropped to fit the response byte budget (0 if none). */
+  dropped: z.number(),
+  /** Set when live capture failed, or when results were trimmed — explains how to narrow. */
   note: z.string().optional(),
   reports: z.array(ReportSchema),
 });
@@ -84,13 +108,15 @@ export function registerGetReports(server: McpServer): void {
     {
       title: "Get reports",
       description:
-        "Fetch individual community ProtonDB reports for a game. Each report is rich and " +
-        "lossless: flat fields (verdict, works, protonVersion, launcher, launchOptions, " +
-        "antiCheat, gpu/cpu/os/kernel/ram, notes) PLUS the full `responses` object (all " +
-        "faults, installs/opens/startsPlay, frameRate, verdictOob, type/variant, " +
-        "per-category notes), full `systemInfo` (incl. steamRuntimeVersion, xWindowManager), " +
-        "and device/contributor when present. Supports server-side filtering; set " +
-        "includeRaw=true for the verbatim original. Use analyze_compatibility first for an overview.",
+        "Fetch individual community ProtonDB reports for a game. Returns COMPACT reports by " +
+        "default — flat fields only (verdict, works, protonVersion, launcher, launchOptions, " +
+        "antiCheat, gpu/cpu/os/kernel/ram, notes, timestamp). To get more, choose explicitly: " +
+        "`fields:[...]` for an exact subset (smallest), `detail:'full'` for the nested " +
+        "responses/systemInfo/device/contributor blobs, or `includeRaw:true` for the verbatim " +
+        "original. Server-side filters: verdict, protonVersionContains, gpuContains, since. " +
+        "Pass `systemProfile` to rank reports by similarity to the user's rig. Large result " +
+        "sets are trimmed to a byte budget (see `dropped`/`note`) so responses never overflow — " +
+        "narrow with filters/fields or call analyze_compatibility for an aggregated overview first.",
       inputSchema,
       outputSchema,
     },
@@ -107,6 +133,10 @@ export function registerGetReports(server: McpServer): void {
         let usedSource: "db" | "live" = "db";
         let note: string | undefined;
 
+        // `raw` and the nested blobs are needed up front only when the caller
+        // asked for them; fetch with raw when includeRaw or a fields list names it.
+        const wantsRaw = args.includeRaw || (args.fields?.includes("raw") ?? false);
+
         const db = getDb();
         const dbCount = countReports(db, appId);
 
@@ -116,9 +146,7 @@ export function registerGetReports(server: McpServer): void {
         if (args.source === "live" || (args.source === "auto" && dbCount === 0)) {
           const { reports: live, error } = await tryFetchLiveReports(appId, args.limit);
           if (live.length > 0 || args.source === "live") {
-            const filtered = applyInMemoryFilters(live, filters).slice(0, args.limit);
-            // Live records always carry `raw`; drop it unless explicitly requested.
-            reports = args.includeRaw ? filtered : filtered.map(({ raw, ...rest }) => rest);
+            reports = applyInMemoryFilters(live, filters).slice(0, args.limit);
             usedSource = "live";
             if (error) note = `Live capture unavailable, returned no reports: ${error}`;
           } else if (error) {
@@ -130,26 +158,49 @@ export function registerGetReports(server: McpServer): void {
           reports = getReports(db, {
             appId,
             limit: args.limit,
-            includeRaw: args.includeRaw,
+            includeRaw: wantsRaw,
             ...filters,
           });
         }
 
-        const truncated =
-          usedSource === "db" ? dbCount > reports.length : reports.length >= args.limit;
+        // Rank by similarity to the user's setup before projecting/trimming, so
+        // the most relevant reports are the ones that survive the byte budget.
+        if (args.systemProfile) reports = rankByProfile(reports, args.systemProfile);
+
+        const fetchedCount = reports.length;
+        const { reports: projected, dropped } = projectAndFit(
+          reports,
+          { fields: args.fields, detail: args.detail, includeRaw: args.includeRaw },
+          config.maxResponseChars,
+        );
+
+        const moreInStore =
+          usedSource === "db" ? dbCount > fetchedCount : fetchedCount >= args.limit;
+        const truncated = moreInStore || dropped > 0;
+        if (dropped > 0) {
+          const hint =
+            `${dropped} more report(s) trimmed to fit the response budget. Narrow with ` +
+            `filters (verdict/gpuContains/since), a smaller limit, a tighter \`fields\` ` +
+            `projection, or call analyze_compatibility for an aggregated overview.`;
+          note = note ? `${note}\n${hint}` : hint;
+        }
+
         const structured = {
           appId,
           name,
           source: usedSource,
-          count: reports.length,
+          count: projected.length,
           truncated,
+          dropped,
           note,
-          reports,
+          reports: projected,
         };
         const head =
-          `${reports.length} report(s) for appId ${appId}${name ? ` (${name})` : ""} from ${usedSource}.` +
+          `${projected.length} report(s) for appId ${appId}${name ? ` (${name})` : ""} from ${usedSource}` +
+          (dropped > 0 ? ` (+${dropped} trimmed)` : "") +
+          "." +
           (note ? `\n${note}` : "");
-        const samples = reports
+        const samples = projected
           .slice(0, 5)
           .map(
             (r) =>

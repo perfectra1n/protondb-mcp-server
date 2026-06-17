@@ -55,37 +55,55 @@ export function getReports(db: DB, f: ReportFilters): Report[] {
   return rows.map((r) => rowToReport(r, f.includeRaw ?? false));
 }
 
+/** How to combine the tokens of a multi-word query. */
+export type MatchMode = "any" | "all";
+
 /**
  * Turn arbitrary user input into a safe FTS5 MATCH expression. Each alphanumeric
  * token is quoted (so characters like '-' and ':' are not misread as FTS
- * operators) and combined with implicit AND. Returns null if no usable tokens.
+ * operators). Tokens are combined with OR by default (`mode: "any"`) so a
+ * multi-keyword query like "vulkan dx11 stutter" finds reports matching ANY term
+ * (ranked by relevance), instead of requiring all of them in one report. Pass
+ * `mode: "all"` for the stricter implicit-AND behaviour. Returns null if no
+ * usable tokens.
  */
-export function toFtsQuery(input: string): string | null {
+export function toFtsQuery(input: string, mode: MatchMode = "any"): string | null {
   const tokens = input.match(/[\p{L}\p{N}]+/gu);
   if (!tokens || tokens.length === 0) return null;
-  return tokens.map((t) => `"${t}"`).join(" ");
+  const quoted = tokens.map((t) => `"${t}"`);
+  return quoted.join(mode === "all" ? " " : " OR ");
 }
 
 /**
  * General full-text keyword search across reports — matches notes, title, Proton
- * version, GPU, and OS. Optionally scoped to a single app. Returns up to `limit`
- * reports (hard-capped) ranked by relevance.
+ * version, GPU, OS, and launch options. Optionally scoped to a single app.
+ * Matches ANY keyword by default (`match: "any"`), ranked by FTS5 relevance
+ * (BM25) so reports hitting more/rarer terms surface first; `match: "all"`
+ * requires every term. `sort: "recent"` orders by timestamp instead of
+ * relevance. Returns up to `limit` reports (hard-capped).
  */
 export function searchReports(
   db: DB,
   query: string,
-  opts: { appId?: string; limit?: number; includeRaw?: boolean } = {},
+  opts: {
+    appId?: string;
+    limit?: number;
+    includeRaw?: boolean;
+    match?: MatchMode;
+    sort?: "relevance" | "recent";
+  } = {},
 ): Report[] {
-  const ftsQuery = toFtsQuery(query);
+  const ftsQuery = toFtsQuery(query, opts.match ?? "any");
   if (!ftsQuery) return [];
   const limit = Math.max(1, Math.min(opts.limit ?? 25, 200));
   const appClause = opts.appId ? "AND r.app_id = @appId" : "";
+  const orderBy = opts.sort === "recent" ? "r.timestamp DESC NULLS LAST" : "rank";
   const rows = db
     .prepare(
       `SELECT r.* FROM reports_fts f
        JOIN reports r ON r.id = f.rowid
        WHERE reports_fts MATCH @query ${appClause}
-       ORDER BY rank LIMIT ${limit}`,
+       ORDER BY ${orderBy} LIMIT ${limit}`,
     )
     .all({ query: ftsQuery, appId: opts.appId }) as ReportRow[];
   return rows.map((r) => rowToReport(r, opts.includeRaw ?? false));

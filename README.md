@@ -93,7 +93,8 @@ Steam store details + current ProtonDB tier.
 
 ### `get_reports`
 
-Individual community reports for a game, with server-side filters.
+Individual community reports for a game, with server-side filters. **Compact by default** —
+each report carries only the flat fields, so responses stay small.
 
 - `appId` (string) **or** `name` (string)
 - `source` (`auto` | `db` | `live`, default `auto`) — `db` = local bulk-dump DB, `live` =
@@ -101,34 +102,48 @@ Individual community reports for a game, with server-side filters.
 - `limit` (int, default 50, max 500)
 - `verdict` (`yes` | `no`), `protonVersionContains` (string), `gpuContains` (string),
   `since` (unix epoch seconds)
+- `detail` (`compact` | `full`, default `compact`) — `full` adds the nested `responses` /
+  `systemInfo` / `device` / `contributor` blobs
+- `fields` (string[]) — exact projection; return ONLY these keys (`appId` always included),
+  e.g. `["verdict","launchOptions","protonVersion","gpu","notes"]`. Overrides `detail`
 - `includeRaw` (bool, default false) — also attach the complete verbatim original record
-- → `{ appId, name, source, count, truncated, note?, reports: [...] }`
+- `systemProfile` (object) — `{ gpuVendor?, gpu?, distro?, kernel?, session?, protonVersion? }`;
+  ranks reports by similarity to the user's rig (best match first, each gets `profileScore`)
+- → `{ appId, name, source, count, truncated, dropped, note?, reports: [...] }`
 
-Every report includes the indexed flat fields **plus** the full structured `responses`
-(all faults, `installs`/`opens`/`startsPlay`, `frameRate`, `batteryPerformance`,
-per-category notes, `verdictOob`/`triedOob`, `type`/`variant`, multiplayer appraisals,
-`launchOptions`, …), `systemInfo` (incl. `steamRuntimeVersion`, `xWindowManager`), and
-`device`/`contributor` when present — so no field is lost. `includeRaw` adds the byte-for-byte
-original on top.
+Large result sets are projected then trimmed to a byte budget
+(`PROTONDB_MCP_MAX_RESPONSE_CHARS`); `dropped`/`note` report what was cut so the response
+never overflows the host's token limit. The flat fields cover the common cases; reach for
+`detail:'full'` or a `fields` projection naming `responses`/`systemInfo`/`raw` only when you
+need the per-category faults or full hardware info.
 
 ### `analyze_compatibility` — start here
 
-Aggregate a game's reports into patterns.
+Aggregate a game's reports into patterns, optionally scoped to a slice of the population.
 
 - `appId` (string) **or** `name` (string)
 - `includeLive` (bool, default false) — also merge the freshest live reports
 - `sampleSize` (int, default 2000, max 5000) — how many DB reports to aggregate
+- `gpuVendor` (`nvidia` | `amd` | `intel`), `gpuContains` (string),
+  `protonVersionContains` (string), `since` (unix epoch seconds) — scope the population
+  before aggregating (e.g. "what works for NVIDIA users in the last year")
 - → verdict breakdown, working rate, **best Proton versions** (among working reports),
-  GPU-vendor and distro breakdowns, representative notes, and the live tier summary.
+  **bestLaunchOptions**, **bestEnvVars** (individual `PROTON_*`/`DXVK_*`/… assignments ranked
+  by frequency), GPU-vendor and distro breakdowns, representative notes, and the live tier summary.
 
 ### `search_reports`
 
 General keyword/full-text search across all reports (notes, title, Proton version, GPU,
-OS). Global, or scoped to one game.
+OS, launch options). Global, or scoped to one game. **Matches any keyword by default**,
+relevance-ranked — so a descriptive multi-word query returns the best matches instead of 0.
 
-- `query` (string, required) — e.g. `"nixos flatpak"`, `"anti-cheat"`, `"GE-Proton9"`, `"6800 xt"`
+- `query` (string, required) — e.g. `"nixos flatpak"`, `"anti-cheat"`, `"GE-Proton9"`, `"vulkan dx11 stutter"`
+- `match` (`any` | `all`, default `any`) — `any` = OR (BM25-ranked); `all` = require every term
+- `sort` (`relevance` | `recent`, default `relevance`)
 - `appId` / `name` (optional scope), `limit` (int, default 25, max 200)
-- → `{ query, appId, count, truncated, reports: [...] }`
+- `detail` / `fields` / `includeRaw` / `systemProfile` — same compact-by-default projection,
+  byte budget, and rig-similarity ranking as `get_reports`
+- → `{ query, appId, count, truncated, dropped, note?, reports: [...] }`
 
 ## Server instructions (the model's "system prompt")
 
@@ -272,9 +287,10 @@ Everything is configurable via env. Defaults in parentheses.
 
 ### Storage
 
-| Variable          | Default              | Description           |
-| ----------------- | -------------------- | --------------------- |
-| `PROTONDB_MCP_DB` | `./data/protondb.db` | SQLite database path. |
+| Variable                        | Default              | Description                                                                                                                            |
+| ------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `PROTONDB_MCP_DB`               | `./data/protondb.db` | SQLite database path.                                                                                                                  |
+| `PROTONDB_MCP_MAX_RESPONSE_CHARS` | `30000`            | Soft byte budget for `get_reports`/`search_reports`. Reports are projected then trimmed to this many chars; the response says how many were dropped. |
 
 ### HTTP transport (`http-server.js`)
 

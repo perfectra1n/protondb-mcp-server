@@ -5,6 +5,7 @@ import { getReports, countReports } from "../db/queries.js";
 import { tryFetchLiveReports } from "../sources/protondb-live.js";
 import { getSummary } from "../sources/summary.js";
 import { analyzeReports } from "../lib/analyze.js";
+import { gpuVendor } from "../lib/normalize.js";
 import { withResolvedAppId, textResult, errorResult } from "./result.js";
 import { logger } from "../lib/logger.js";
 import type { Report } from "../lib/types.js";
@@ -23,6 +24,28 @@ const inputSchema = z.object({
     .max(5000)
     .default(2000)
     .describe("Max DB reports to aggregate over (most recent first)"),
+  // Scoping filters — narrow the population BEFORE aggregating, e.g. "what works
+  // for NVIDIA users" or "what works in the last year".
+  gpuVendor: z
+    .enum(["nvidia", "amd", "intel"])
+    .optional()
+    .describe("Only aggregate reports from this GPU vendor"),
+  gpuContains: z
+    .string()
+    .optional()
+    .describe("Only aggregate reports whose GPU contains this substring (e.g. '7900', 'rtx 40')"),
+  protonVersionContains: z
+    .string()
+    .optional()
+    .describe("Only aggregate reports whose Proton version contains this substring"),
+  since: z
+    .number()
+    .int()
+    .optional()
+    .describe(
+      "Only aggregate reports at/after this Unix epoch-seconds timestamp — use for recency-" +
+        "scoped advice, since ProtonDB reports go stale as games and Proton update.",
+    ),
 });
 
 const CountSchema = z.object({ key: z.string(), count: z.number(), workingCount: z.number() });
@@ -47,6 +70,7 @@ const outputSchema = z.object({
   topProtonVersions: z.array(CountSchema),
   bestProtonVersions: z.array(CountSchema),
   bestLaunchOptions: z.array(CountSchema),
+  bestEnvVars: z.array(CountSchema),
   antiCheatReports: z.number(),
   gpuVendors: z.array(CountSchema),
   topDistros: z.array(CountSchema),
@@ -68,11 +92,13 @@ export function registerAnalyzeCompatibility(server: McpServer): void {
     {
       title: "Analyze compatibility",
       description:
-        "Aggregate a game's individual ProtonDB reports into compatibility patterns: " +
-        "verdict breakdown, working rate, best Proton versions (among working reports), " +
-        "bestLaunchOptions (launch flags working reports used), antiCheatReports (count), " +
-        "GPU-vendor and distro splits, and representative notes. The best starting point " +
-        "for 'what works best' and 'what launch flags should I use'.",
+        "START HERE for 'what works best' / 'what should I set'. Aggregates a game's reports " +
+        "into compatibility patterns: verdict breakdown, working rate, best Proton versions, " +
+        "bestLaunchOptions (full launch strings working reports used), bestEnvVars (individual " +
+        "PROTON_*/DXVK_*/etc. assignments ranked by frequency), antiCheatReports, GPU-vendor " +
+        "and distro splits, and representative notes. Scope the population with gpuVendor, " +
+        "gpuContains, protonVersionContains, or since — e.g. 'what works for NVIDIA users in " +
+        "the last year' — to get targeted answers without paging raw reports.",
       inputSchema,
       outputSchema,
     },
@@ -80,13 +106,26 @@ export function registerAnalyzeCompatibility(server: McpServer): void {
       withResolvedAppId(args, async ({ appId, name }) => {
         const db = getDb();
 
-        let reports: Report[] = getReports(db, { appId, limit: args.sampleSize });
+        let reports: Report[] = getReports(db, {
+          appId,
+          limit: args.sampleSize,
+          protonVersionContains: args.protonVersionContains,
+          gpuContains: args.gpuContains,
+          since: args.since,
+        });
         if (args.includeLive) {
           // Live capture is best-effort: on any failure we log and continue with
           // the DB-only analysis rather than failing the call.
           const { reports: live, error } = await tryFetchLiveReports(appId, 40);
           if (error) logger.warn("includeLive failed, continuing with DB only:", error);
           if (live.length > 0) reports = [...reports, ...live];
+        }
+
+        // GPU vendor isn't a DB column, so classify and filter in memory. (Also
+        // re-applies proton/gpu/since filters to any merged live reports.)
+        if (args.gpuVendor) {
+          const want = args.gpuVendor;
+          reports = reports.filter((r) => gpuVendor(r.gpu).toLowerCase() === want);
         }
 
         const summary = await getSummary(appId);
@@ -117,6 +156,12 @@ export function registerAnalyzeCompatibility(server: McpServer): void {
           `Common launch options (working): ${
             analysis.bestLaunchOptions
               .slice(0, 3)
+              .map((v) => `${v.key} (${v.workingCount})`)
+              .join(", ") || "none reported"
+          }\n` +
+          `Common env vars (working): ${
+            analysis.bestEnvVars
+              .slice(0, 5)
               .map((v) => `${v.key} (${v.workingCount})`)
               .join(", ") || "none reported"
           }\n` +

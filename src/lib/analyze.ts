@@ -29,6 +29,12 @@ export interface Analysis {
   bestProtonVersions: Count[];
   /** Launch options/flags ranked by usage among *working* reports. */
   bestLaunchOptions: Count[];
+  /**
+   * Individual environment-variable assignments (e.g. PROTON_USE_WINED3D=1,
+   * DXVK_HUD=fps, RADV_PERFTEST=...) extracted from working reports' launch
+   * options, ranked by frequency. The single most actionable "what do I set" list.
+   */
+  bestEnvVars: Count[];
   /** How many reports flagged the game as impacted by anti-cheat. */
   antiCheatReports: number;
   /** GPU vendor split. */
@@ -39,7 +45,11 @@ export interface Analysis {
   noteSamples: NoteSample[];
 }
 
-function tally(reports: Report[], keyFn: (r: Report) => string | null, topN: number): Count[] {
+function tally(
+  reports: Report[],
+  keyFn: (r: Report) => string | null | undefined,
+  topN: number,
+): Count[] {
   const map = new Map<string, Count>();
   for (const r of reports) {
     const key = keyFn(r);
@@ -48,6 +58,31 @@ function tally(reports: Report[], keyFn: (r: Report) => string | null, topN: num
     entry.count++;
     if (r.works === true) entry.workingCount++;
     map.set(key, entry);
+  }
+  return [...map.values()].sort((a, b) => b.count - a.count).slice(0, topN);
+}
+
+// KEY=value style assignments (e.g. PROTON_USE_WINED3D=1, DXVK_HUD=fps). Keys are
+// SCREAMING_SNAKE so we don't mistake a path or a `%command%` token for an env var.
+const ENV_VAR_RE = /\b[A-Z][A-Z0-9_]{2,}=\S+/g;
+
+/** Pull distinct environment-variable assignments out of a launch-options string. */
+export function extractEnvVars(launchOptions: string | null | undefined): string[] {
+  if (!launchOptions) return [];
+  const matches = launchOptions.match(ENV_VAR_RE);
+  return matches ? [...new Set(matches)] : [];
+}
+
+/** Frequency tally of env-var assignments across a set of reports. */
+function tallyEnvVars(reports: Report[], topN: number): Count[] {
+  const map = new Map<string, Count>();
+  for (const r of reports) {
+    for (const ev of extractEnvVars(r.launchOptions)) {
+      const entry = map.get(ev) ?? { key: ev, count: 0, workingCount: 0 };
+      entry.count++;
+      if (r.works === true) entry.workingCount++;
+      map.set(ev, entry);
+    }
   }
   return [...map.values()].sort((a, b) => b.count - a.count).slice(0, topN);
 }
@@ -69,6 +104,7 @@ export function analyzeReports(
   const working = reports.filter((r) => r.works === true);
   const bestProtonVersions = tally(working, (r) => r.protonVersion, 8);
   const bestLaunchOptions = tally(working, (r) => r.launchOptions, 8);
+  const bestEnvVars = tallyEnvVars(working, 12);
   const antiCheatReports = reports.filter((r) => r.antiCheat === true).length;
 
   const noteSamples: NoteSample[] = reports
@@ -76,11 +112,11 @@ export function analyzeReports(
     .sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0))
     .slice(0, 10)
     .map((r) => ({
-      works: r.works,
-      protonVersion: r.protonVersion,
-      gpu: r.gpu,
-      os: r.os,
-      timestamp: r.timestamp,
+      works: r.works ?? null,
+      protonVersion: r.protonVersion ?? null,
+      gpu: r.gpu ?? null,
+      os: r.os ?? null,
+      timestamp: r.timestamp ?? null,
       notes: r.notes!.slice(0, 500),
     }));
 
@@ -96,6 +132,7 @@ export function analyzeReports(
     topProtonVersions: tally(reports, (r) => r.protonVersion, 8),
     bestProtonVersions,
     bestLaunchOptions,
+    bestEnvVars,
     antiCheatReports,
     gpuVendors: tally(reports, (r) => gpuVendor(r.gpu), 5),
     topDistros: tally(reports, (r) => r.os, 6),
