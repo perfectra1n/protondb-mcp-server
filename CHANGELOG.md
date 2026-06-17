@@ -1,5 +1,14 @@
 # Changelog
 
+## [2026.6.7](https://github.com/perfectra1n/protondb-mcp-server/compare/v2026.6.6...v2026.6.7) (2026-06-17)
+
+
+### Features
+
+* **dev:** yay format ([f7ba9cb](https://github.com/perfectra1n/protondb-mcp-server/commit/f7ba9cbbabef10141e7df20cbee6daeb385a83fd))
+* **tools:** add some more useful tools ([516cafc](https://github.com/perfectra1n/protondb-mcp-server/commit/516cafc74fef9979b1c3681f5bfe129f60491618))
+* **tools:** update tools too ([d641900](https://github.com/perfectra1n/protondb-mcp-server/commit/d641900e29d9b90fd8ba4479a6d5521fa8a41f77))
+
 ## [2026.6.6](https://github.com/perfectra1n/protondb-mcp-server/compare/v2026.6.5...v2026.6.6) (2026-06-15)
 
 
