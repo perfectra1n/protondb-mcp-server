@@ -15,11 +15,13 @@ export interface NoteSample {
   notes: string;
 }
 
-export interface Analysis {
-  appId: string;
-  title: string | null;
+/**
+ * Game-agnostic aggregate signal computed from a set of reports. Shared by the
+ * per-game {@link Analysis} and the cross-game environment rollup so both reason
+ * over the same pre-computed patterns.
+ */
+export interface Patterns {
   totalReports: number;
-  summary: Summary | null;
   verdictBreakdown: { yes: number; no: number; unknown: number };
   /** Fraction of yes/no reports that said "yes" (0..1), or null if no data. */
   workingRate: number | null;
@@ -43,6 +45,12 @@ export interface Analysis {
   topDistros: Count[];
   /** A handful of representative recent notes for the model to read. */
   noteSamples: NoteSample[];
+}
+
+export interface Analysis extends Patterns {
+  appId: string;
+  title: string | null;
+  summary: Summary | null;
 }
 
 function tally(
@@ -88,15 +96,11 @@ function tallyEnvVars(reports: Report[], topN: number): Count[] {
 }
 
 /**
- * Aggregate a set of individual reports into compatibility patterns. Pure and
- * deterministic — the analyze tool returns this directly so the model reasons
- * over pre-computed signal rather than raw rows.
+ * Aggregate a set of reports into game-agnostic compatibility patterns. Pure and
+ * deterministic. Shared by {@link analyzeReports} (one game) and the cross-game
+ * environment rollup (all reports matching an environment keyword).
  */
-export function analyzeReports(
-  appId: string,
-  reports: Report[],
-  summary: Summary | null,
-): Analysis {
+export function aggregatePatterns(reports: Report[]): Patterns {
   const yes = reports.filter((r) => r.works === true).length;
   const no = reports.filter((r) => r.works === false).length;
   const unknown = reports.length - yes - no;
@@ -120,13 +124,8 @@ export function analyzeReports(
       notes: r.notes!.slice(0, 500),
     }));
 
-  const title = reports.find((r) => r.title)?.title ?? null;
-
   return {
-    appId,
-    title,
     totalReports: reports.length,
-    summary,
     verdictBreakdown: { yes, no, unknown },
     workingRate: yes + no > 0 ? yes / (yes + no) : null,
     topProtonVersions: tally(reports, (r) => r.protonVersion, 8),
@@ -137,5 +136,24 @@ export function analyzeReports(
     gpuVendors: tally(reports, (r) => gpuVendor(r.gpu), 5),
     topDistros: tally(reports, (r) => r.os, 6),
     noteSamples,
+  };
+}
+
+/**
+ * Aggregate one game's reports into compatibility patterns, adding the
+ * game-specific appId/title/summary. The analyze tool returns this directly so
+ * the model reasons over pre-computed signal rather than raw rows.
+ */
+export function analyzeReports(
+  appId: string,
+  reports: Report[],
+  summary: Summary | null,
+): Analysis {
+  const title = reports.find((r) => r.title)?.title ?? null;
+  return {
+    appId,
+    title,
+    summary,
+    ...aggregatePatterns(reports),
   };
 }

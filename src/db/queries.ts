@@ -91,11 +91,13 @@ export function searchReports(
     includeRaw?: boolean;
     match?: MatchMode;
     sort?: "relevance" | "recent";
+    /** Hard cap on `limit` (default 200). Raised internally for aggregation. */
+    maxLimit?: number;
   } = {},
 ): Report[] {
   const ftsQuery = toFtsQuery(query, opts.match ?? "any");
   if (!ftsQuery) return [];
-  const limit = Math.max(1, Math.min(opts.limit ?? 25, 200));
+  const limit = Math.max(1, Math.min(opts.limit ?? 25, opts.maxLimit ?? 200));
   const appClause = opts.appId ? "AND r.app_id = @appId" : "";
   const orderBy = opts.sort === "recent" ? "r.timestamp DESC NULLS LAST" : "rank";
   const rows = db

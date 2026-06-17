@@ -4,6 +4,7 @@ import { registerSearchGames } from "./tools/search-games.js";
 import { registerGetGameDetails } from "./tools/get-game-details.js";
 import { registerGetReports } from "./tools/get-reports.js";
 import { registerAnalyzeCompatibility } from "./tools/analyze-compatibility.js";
+import { registerAnalyzeEnvironment } from "./tools/analyze-environment.js";
 import { registerSearchReports } from "./tools/search-reports.js";
 
 // Read the version from package.json at runtime so it stays in sync with
@@ -63,6 +64,9 @@ Then map findings to the tools:
   similar hardware/distro.
 - Use search_reports for environment-specific gotchas, e.g. "nixos", "flatpak",
   "wayland", "silverblue", "steam deck", "anti-cheat", "gamescope".
+- analyze_environment aggregates ALL reports matching an environment keyword (e.g.
+  "nixos", "bazzite", "wayland") into the same patterns as analyze_compatibility —
+  use it for cross-game "what flags/fixes work for <environment>" questions.
 - Prefer analyze_compatibility for a quick overview, then drill in with get_reports.
 - Caveats: NixOS often needs steam-run/FHS or extraPkgs; Flatpak Steam is sandboxed
   (paths/launchers differ); atomic distros (Silverblue/Bazzite/SteamOS) constrain which
@@ -115,6 +119,7 @@ export function buildServer(): McpServer {
   registerGetGameDetails(server);
   registerGetReports(server);
   registerAnalyzeCompatibility(server);
+  registerAnalyzeEnvironment(server);
   registerSearchReports(server);
 
   return server;

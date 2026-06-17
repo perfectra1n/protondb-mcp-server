@@ -5,12 +5,13 @@ import type { GameHit } from "../lib/types.js";
 const PlatformsSchema = z
   .object({ windows: z.boolean(), mac: z.boolean(), linux: z.boolean() })
   .partial()
+  .nullable()
   .optional();
 
 const StoreSearchSchema = z.object({
   items: z
-    .array(z.object({ id: z.number(), name: z.string(), platforms: PlatformsSchema }))
-    .optional(),
+    .array(z.object({ id: z.number(), name: z.string().nullish(), platforms: PlatformsSchema }))
+    .nullish(),
 });
 
 /**
@@ -27,8 +28,8 @@ export async function searchSteam(query: string, limit: number): Promise<GameHit
   });
   return (data.items ?? []).slice(0, limit).map((it) => ({
     appId: String(it.id),
-    name: it.name,
-    nativeLinux: it.platforms?.linux,
+    name: it.name ?? "(unknown)",
+    nativeLinux: it.platforms?.linux ?? undefined,
     source: "steam" as const,
   }));
 }
@@ -46,16 +47,22 @@ export interface SteamDetails {
   website?: string;
 }
 
+// Steam returns explicit `null` for many of these leaf fields (e.g. `website`
+// on unreleased games), so each value is nullish — not just optional — to keep
+// a single null from failing the whole parse. See get_game_details regression.
 const AppDetailsDataSchema = z
   .object({
-    type: z.string(),
-    name: z.string(),
-    short_description: z.string(),
-    genres: z.array(z.object({ description: z.string() }).partial()),
-    release_date: z.object({ date: z.string() }).partial(),
-    platforms: z.object({ windows: z.boolean(), mac: z.boolean(), linux: z.boolean() }).partial(),
-    metacritic: z.object({ score: z.number() }).partial(),
-    website: z.string(),
+    type: z.string().nullish(),
+    name: z.string().nullish(),
+    short_description: z.string().nullish(),
+    genres: z.array(z.object({ description: z.string().nullish() }).partial()).nullish(),
+    release_date: z.object({ date: z.string().nullish() }).partial().nullish(),
+    platforms: z
+      .object({ windows: z.boolean(), mac: z.boolean(), linux: z.boolean() })
+      .partial()
+      .nullish(),
+    metacritic: z.object({ score: z.number().nullish() }).partial().nullish(),
+    website: z.string().nullish(),
   })
   .partial();
 
@@ -78,13 +85,13 @@ export async function getSteamDetails(appId: string): Promise<SteamDetails | nul
   return {
     appId,
     name: d.name ?? "(unknown)",
-    type: d.type,
-    shortDescription: d.short_description,
+    type: d.type ?? undefined,
+    shortDescription: d.short_description ?? undefined,
     genres: d.genres?.map((g) => g.description).filter((x): x is string => typeof x === "string"),
-    releaseDate: d.release_date?.date,
-    nativeLinux: d.platforms?.linux,
-    platforms: d.platforms,
-    metacritic: d.metacritic?.score,
-    website: d.website,
+    releaseDate: d.release_date?.date ?? undefined,
+    nativeLinux: d.platforms?.linux ?? undefined,
+    platforms: d.platforms ?? undefined,
+    metacritic: d.metacritic?.score ?? undefined,
+    website: d.website ?? undefined,
   };
 }

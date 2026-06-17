@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { analyzeReports } from "../src/lib/analyze.js";
+import { analyzeReports, aggregatePatterns } from "../src/lib/analyze.js";
 import type { Report } from "../src/lib/types.js";
 
 function rep(p: Partial<Report>): Report {
@@ -110,5 +110,68 @@ describe("analyzeReports", () => {
     expect(env["DXVK_HUD=fps"]).toBe(1);
     // `gamemoderun` is a command, not an env var — must not be captured.
     expect(a.bestEnvVars.some((c) => c.key.includes("gamemoderun"))).toBe(false);
+  });
+});
+
+describe("aggregatePatterns (cross-game core)", () => {
+  // Reports from DIFFERENT games — the env rollup aggregates regardless of appId.
+  const reports: Report[] = [
+    rep({
+      appId: "10",
+      title: "Game A",
+      works: true,
+      verdict: "yes",
+      protonVersion: "GE-Proton9-1",
+      launchOptions: "PROTON_USE_WINED3D=1 %command%",
+      gpu: "NVIDIA RTX 4080",
+      os: "NixOS",
+      notes: "needs steam-run",
+      timestamp: 30,
+    }),
+    rep({
+      appId: "20",
+      title: "Game B",
+      works: true,
+      verdict: "yes",
+      protonVersion: "GE-Proton9-1",
+      launchOptions: "PROTON_USE_WINED3D=1 gamemoderun %command%",
+      gpu: "AMD RX 6800",
+      os: "NixOS",
+      timestamp: 20,
+    }),
+    rep({
+      appId: "30",
+      title: "Game C",
+      works: false,
+      verdict: "no",
+      protonVersion: "Default",
+      gpu: "NVIDIA GTX 1060",
+      os: "NixOS",
+      timestamp: 10,
+    }),
+  ];
+
+  it("aggregates patterns across games without appId/title fields", () => {
+    const p = aggregatePatterns(reports);
+    expect(p.totalReports).toBe(3);
+    expect(p.verdictBreakdown).toEqual({ yes: 2, no: 1, unknown: 0 });
+    expect(p.workingRate).toBeCloseTo(2 / 3, 5);
+    expect(p).not.toHaveProperty("appId");
+    expect(p).not.toHaveProperty("title");
+  });
+
+  it("ranks the most common env var across working reports of different games", () => {
+    const p = aggregatePatterns(reports);
+    expect(p.bestEnvVars[0]?.key).toBe("PROTON_USE_WINED3D=1");
+    expect(p.bestEnvVars[0]?.workingCount).toBe(2);
+  });
+
+  it("analyzeReports adds appId/title/summary on top of the shared core", () => {
+    const a = analyzeReports("10", reports, null);
+    expect(a.appId).toBe("10");
+    expect(a.title).toBe("Game A");
+    expect(a.summary).toBeNull();
+    // Shared aggregate fields still present.
+    expect(a.totalReports).toBe(aggregatePatterns(reports).totalReports);
   });
 });
