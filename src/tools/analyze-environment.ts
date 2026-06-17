@@ -3,7 +3,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getDb } from "../db/store.js";
 import { searchReports } from "../db/queries.js";
 import { gpuVendor } from "../lib/normalize.js";
-import { aggregatePatterns } from "../lib/analyze.js";
+import { aggregatePatterns, CountSchema, NoteSampleSchema } from "../lib/analyze.js";
 import { textResult, errorResult } from "./result.js";
 
 const inputSchema = z.object({
@@ -33,8 +33,6 @@ const inputSchema = z.object({
     .describe("Max matching reports to aggregate over (relevance-ranked)"),
 });
 
-const CountSchema = z.object({ key: z.string(), count: z.number(), workingCount: z.number() });
-
 const outputSchema = z.object({
   query: z.string(),
   totalReports: z.number(),
@@ -45,18 +43,15 @@ const outputSchema = z.object({
   bestLaunchOptions: z.array(CountSchema),
   bestEnvVars: z.array(CountSchema),
   antiCheatReports: z.number(),
+  oobWorkingRate: z.number().nullable(),
+  oobReports: z.number(),
+  oobWorkingCount: z.number(),
+  faultBreakdown: z.array(CountSchema),
+  topLaunchers: z.array(CountSchema),
+  topWindowManagers: z.array(CountSchema),
   gpuVendors: z.array(CountSchema),
   topDistros: z.array(CountSchema),
-  noteSamples: z.array(
-    z.object({
-      works: z.boolean().nullable(),
-      protonVersion: z.string().nullable(),
-      gpu: z.string().nullable(),
-      os: z.string().nullable(),
-      timestamp: z.number().nullable(),
-      notes: z.string(),
-    }),
-  ),
+  noteSamples: z.array(NoteSampleSchema),
 });
 
 export function registerAnalyzeEnvironment(server: McpServer): void {
@@ -68,10 +63,12 @@ export function registerAnalyzeEnvironment(server: McpServer): void {
         "Cross-game aggregation for an environment keyword (e.g. 'nixos', 'bazzite', 'wayland', " +
         "'flatpak', 'steam deck'). Searches ALL ingested reports matching the keyword and rolls " +
         "them up into the same patterns as analyze_compatibility — verdict breakdown, working " +
-        "rate, bestProtonVersions, bestLaunchOptions, bestEnvVars (ranked PROTON_*/DXVK_*/etc. " +
-        "assignments), antiCheatReports, GPU-vendor/distro splits, and representative notes. Use " +
-        "this for 'what flags/fixes work for <environment>' questions; use analyze_compatibility " +
-        "when the question is about one specific game.",
+        "rate, oobWorkingRate (works without tinkering vs needing flags), bestProtonVersions, " +
+        "bestLaunchOptions, bestEnvVars (ranked PROTON_*/DXVK_*/etc. assignments), faultBreakdown " +
+        "(per-category fault prevalence), antiCheatReports, topLaunchers, topWindowManagers, " +
+        "GPU-vendor/distro splits, and representative notes (with each reporter's launchOptions + " +
+        "kernel/driver). Use this for 'what flags/fixes work for <environment>' questions; use " +
+        "analyze_compatibility when the question is about one specific game.",
       inputSchema,
       outputSchema,
     },
@@ -103,8 +100,11 @@ export function registerAnalyzeEnvironment(server: McpServer): void {
 
       const pct =
         patterns.workingRate === null ? "?" : `${Math.round(patterns.workingRate * 100)}%`;
+      const oobPct =
+        patterns.oobWorkingRate === null ? "?" : `${Math.round(patterns.oobWorkingRate * 100)}%`;
       const text =
-        `Environment "${args.query}" — aggregated ${patterns.totalReports} report(s); working rate ${pct}.\n` +
+        `Environment "${args.query}" — aggregated ${patterns.totalReports} report(s); working rate ${pct}` +
+        `${patterns.oobReports > 0 ? `, out-of-the-box ${oobPct} (n=${patterns.oobReports})` : ""}.\n` +
         `Common launch options (working): ${
           patterns.bestLaunchOptions
             .slice(0, 3)
@@ -123,6 +123,13 @@ export function registerAnalyzeEnvironment(server: McpServer): void {
             .map((v) => `${v.key} (${v.workingCount} ok)`)
             .join(", ") || "n/a"
         }\n` +
+        `Common faults: ${
+          patterns.faultBreakdown
+            .slice(0, 4)
+            .map((v) => `${v.key} ${v.count}`)
+            .join(", ") || "none reported"
+        }\n` +
+        `Launchers: ${patterns.topLaunchers.map((v) => `${v.key} ${v.count}`).join(", ") || "n/a"}\n` +
         `GPU vendors: ${patterns.gpuVendors.map((v) => `${v.key} ${v.count}`).join(", ") || "n/a"}`;
 
       return textResult(text, structured as unknown as Record<string, unknown>);

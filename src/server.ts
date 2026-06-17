@@ -52,9 +52,14 @@ use these fields, don't assume only a tier/verdict:
 - systemInfo: cpu, gpu, gpuDriver, kernel, os, ram, steamRuntimeVersion, xWindowManager.
 - device/contributor: present on live reports (hardwareType, playtime, …).
 - includeRaw:true on get_reports adds the byte-for-byte original record.
-analyze_compatibility aggregates these into: verdict breakdown, working rate, best Proton
-versions among working reports, bestLaunchOptions (flags that working reports used),
-antiCheatReports (count), and GPU-vendor/distro splits — start here for "what works/flags".
+analyze_compatibility aggregates these into: verdict breakdown, working rate, oobWorkingRate
+(how often it works WITHOUT tinkering vs needing flags), best Proton versions among working
+reports, bestLaunchOptions (flags that working reports used), bestEnvVars (individual
+PROTON_*/DXVK_*/etc. assignments), faultBreakdown (per-category graphical/audio/performance/
+stability/… fault prevalence), antiCheatReports (count), topLaunchers (Steam/Heroic/Lutris),
+topWindowManagers (compositor), and GPU-vendor/distro splits — start here for "what works/flags".
+analyze_environment runs the SAME rollup across ALL games matching an environment keyword
+(e.g. "nixos", "bazzite", "wayland") for cross-game "what works for <environment>" questions.
 
 Then map findings to the tools:
 - Filter get_reports by gpuContains (their GPU vendor/model) and protonVersionContains

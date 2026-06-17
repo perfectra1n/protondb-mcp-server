@@ -124,6 +124,10 @@ describe("aggregatePatterns (cross-game core)", () => {
       protonVersion: "GE-Proton9-1",
       launchOptions: "PROTON_USE_WINED3D=1 %command%",
       gpu: "NVIDIA RTX 4080",
+      gpuDriver: "565.77",
+      cpu: "Ryzen 7 7800X3D",
+      kernel: "6.12.10-zen1",
+      ram: "32 GB",
       os: "NixOS",
       notes: "needs steam-run",
       timestamp: 30,
@@ -164,6 +168,58 @@ describe("aggregatePatterns (cross-game core)", () => {
     const p = aggregatePatterns(reports);
     expect(p.bestEnvVars[0]?.key).toBe("PROTON_USE_WINED3D=1");
     expect(p.bestEnvVars[0]?.workingCount).toBe(2);
+  });
+
+  it("computes out-of-the-box working rate from verdictOob", () => {
+    const oobReports: Report[] = [
+      rep({ works: true, responses: { verdictOob: "yes" } }),
+      rep({ works: true, responses: { verdictOob: "no" } }), // works, but only after tinkering
+      rep({ works: true, responses: { verdictOob: "yes" } }),
+      rep({ works: true, responses: {} }), // no OOB answer — excluded from the rate
+    ];
+    const p = aggregatePatterns(oobReports);
+    expect(p.oobReports).toBe(3);
+    expect(p.oobWorkingCount).toBe(2);
+    expect(p.oobWorkingRate).toBeCloseTo(2 / 3, 5);
+  });
+
+  it("breaks down fault categories and counts how many still worked", () => {
+    const faultReports: Report[] = [
+      rep({ works: true, responses: { performanceFaults: "yes", graphicalFaults: "no" } }),
+      rep({ works: false, responses: { performanceFaults: "yes", stabilityFaults: "yes" } }),
+      rep({ works: true, responses: { graphicalFaults: "no" } }),
+    ];
+    const p = aggregatePatterns(faultReports);
+    const perf = p.faultBreakdown.find((f) => f.key === "performance");
+    expect(perf?.count).toBe(2);
+    expect(perf?.workingCount).toBe(1);
+    // A category nobody flagged "yes" is omitted.
+    expect(p.faultBreakdown.some((f) => f.key === "graphical")).toBe(false);
+  });
+
+  it("tallies launchers and window managers", () => {
+    const wmReports: Report[] = [
+      rep({ launcher: "Steam", systemInfo: { xWindowManager: "KWin" } }),
+      rep({ launcher: "steam", systemInfo: { xWindowManager: "KWin" } }),
+      rep({ launcher: "Heroic", systemInfo: { xWindowManager: "GNOME Shell" } }),
+    ];
+    const p = aggregatePatterns(wmReports);
+    // launcher is lower-cased so "Steam"/"steam" merge.
+    expect(p.topLaunchers.find((l) => l.key === "steam")?.count).toBe(2);
+    expect(p.topLaunchers.find((l) => l.key === "heroic")?.count).toBe(1);
+    expect(p.topWindowManagers.find((w) => w.key === "KWin")?.count).toBe(2);
+  });
+
+  it("note samples carry the reporter's tweaks and setup (launchOptions/kernel/driver)", () => {
+    // Only Game A has notes, so it's the sole sample — assert it's enriched.
+    const p = aggregatePatterns(reports);
+    const sample = p.noteSamples.find((s) => s.notes === "needs steam-run");
+    expect(sample).toBeDefined();
+    expect(sample?.launchOptions).toBe("PROTON_USE_WINED3D=1 %command%");
+    expect(sample?.kernel).toBe("6.12.10-zen1");
+    expect(sample?.gpuDriver).toBe("565.77");
+    expect(sample?.cpu).toBe("Ryzen 7 7800X3D");
+    expect(sample?.ram).toBe("32 GB");
   });
 
   it("analyzeReports adds appId/title/summary on top of the shared core", () => {

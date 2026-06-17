@@ -4,7 +4,7 @@ import { getDb } from "../db/store.js";
 import { getReports, countReports } from "../db/queries.js";
 import { tryFetchLiveReports } from "../sources/protondb-live.js";
 import { getSummary } from "../sources/summary.js";
-import { analyzeReports } from "../lib/analyze.js";
+import { analyzeReports, CountSchema, NoteSampleSchema } from "../lib/analyze.js";
 import { gpuVendor } from "../lib/normalize.js";
 import { withResolvedAppId, textResult, errorResult } from "./result.js";
 import { logger } from "../lib/logger.js";
@@ -48,8 +48,6 @@ const inputSchema = z.object({
     ),
 });
 
-const CountSchema = z.object({ key: z.string(), count: z.number(), workingCount: z.number() });
-
 const outputSchema = z.object({
   appId: z.string(),
   title: z.string().nullable(),
@@ -72,18 +70,15 @@ const outputSchema = z.object({
   bestLaunchOptions: z.array(CountSchema),
   bestEnvVars: z.array(CountSchema),
   antiCheatReports: z.number(),
+  oobWorkingRate: z.number().nullable(),
+  oobReports: z.number(),
+  oobWorkingCount: z.number(),
+  faultBreakdown: z.array(CountSchema),
+  topLaunchers: z.array(CountSchema),
+  topWindowManagers: z.array(CountSchema),
   gpuVendors: z.array(CountSchema),
   topDistros: z.array(CountSchema),
-  noteSamples: z.array(
-    z.object({
-      works: z.boolean().nullable(),
-      protonVersion: z.string().nullable(),
-      gpu: z.string().nullable(),
-      os: z.string().nullable(),
-      timestamp: z.number().nullable(),
-      notes: z.string(),
-    }),
-  ),
+  noteSamples: z.array(NoteSampleSchema),
 });
 
 export function registerAnalyzeCompatibility(server: McpServer): void {
@@ -93,12 +88,15 @@ export function registerAnalyzeCompatibility(server: McpServer): void {
       title: "Analyze compatibility",
       description:
         "START HERE for 'what works best' / 'what should I set'. Aggregates a game's reports " +
-        "into compatibility patterns: verdict breakdown, working rate, best Proton versions, " +
-        "bestLaunchOptions (full launch strings working reports used), bestEnvVars (individual " +
-        "PROTON_*/DXVK_*/etc. assignments ranked by frequency), antiCheatReports, GPU-vendor " +
-        "and distro splits, and representative notes. Scope the population with gpuVendor, " +
-        "gpuContains, protonVersionContains, or since — e.g. 'what works for NVIDIA users in " +
-        "the last year' — to get targeted answers without paging raw reports.",
+        "into compatibility patterns: verdict breakdown, working rate, oobWorkingRate (how often " +
+        "it works WITHOUT tinkering vs needing flags), best Proton versions, bestLaunchOptions " +
+        "(full launch strings working reports used), bestEnvVars (individual PROTON_*/DXVK_*/etc. " +
+        "assignments ranked by frequency), faultBreakdown (per-category graphical/audio/" +
+        "performance/stability/… fault prevalence), antiCheatReports, topLaunchers (Steam/Heroic/" +
+        "Lutris), topWindowManagers (compositor), GPU-vendor and distro splits, and representative " +
+        "notes (with each reporter's launchOptions + kernel/driver). Scope the population with " +
+        "gpuVendor, gpuContains, protonVersionContains, or since — e.g. 'what works for NVIDIA " +
+        "users in the last year' — to get targeted answers without paging raw reports.",
       inputSchema,
       outputSchema,
     },
@@ -143,10 +141,13 @@ export function registerAnalyzeCompatibility(server: McpServer): void {
         const dbTotal = countReports(db, appId);
         const pct =
           analysis.workingRate === null ? "?" : `${Math.round(analysis.workingRate * 100)}%`;
+        const oobPct =
+          analysis.oobWorkingRate === null ? "?" : `${Math.round(analysis.oobWorkingRate * 100)}%`;
         const text =
           `${analysis.title ?? appId} — ProtonDB tier: ${summary?.tier ?? "unknown"}` +
           `${summary?.total ? ` (${summary.total} total reports)` : ""}\n` +
-          `Analyzed ${analysis.totalReports} report(s)${dbTotal > analysis.totalReports ? ` of ${dbTotal} in DB` : ""}; working rate ${pct}.\n` +
+          `Analyzed ${analysis.totalReports} report(s)${dbTotal > analysis.totalReports ? ` of ${dbTotal} in DB` : ""}; working rate ${pct}` +
+          `${analysis.oobReports > 0 ? `, out-of-the-box ${oobPct} (n=${analysis.oobReports})` : ""}.\n` +
           `Best Proton versions: ${
             analysis.bestProtonVersions
               .slice(0, 3)
@@ -166,6 +167,12 @@ export function registerAnalyzeCompatibility(server: McpServer): void {
               .join(", ") || "none reported"
           }\n` +
           `Anti-cheat-impacted reports: ${analysis.antiCheatReports}\n` +
+          `Common faults: ${
+            analysis.faultBreakdown
+              .slice(0, 4)
+              .map((v) => `${v.key} ${v.count}`)
+              .join(", ") || "none reported"
+          }\n` +
           `GPU vendors: ${analysis.gpuVendors.map((v) => `${v.key} ${v.count}`).join(", ") || "n/a"}`;
 
         return textResult(text, analysis as unknown as Record<string, unknown>);
