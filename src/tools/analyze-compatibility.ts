@@ -5,9 +5,10 @@ import { getReports, countReports } from "../db/queries.js";
 import { tryFetchLiveReports } from "../sources/protondb-live.js";
 import { getSummary } from "../sources/summary.js";
 import { analyzeReports, CountSchema, NoteSampleSchema } from "../lib/analyze.js";
-import { gpuVendor } from "../lib/normalize.js";
+import { gpuVendor, dedupeReports } from "../lib/normalize.js";
 import { withResolvedAppId, textResult, errorResult } from "./result.js";
 import { logger } from "../lib/logger.js";
+import { config } from "../lib/config.js";
 import type { Report } from "../lib/types.js";
 
 const inputSchema = z.object({
@@ -15,8 +16,11 @@ const inputSchema = z.object({
   name: z.string().optional().describe("Game name; resolved to an appId if appId is omitted"),
   includeLive: z
     .boolean()
-    .default(false)
-    .describe("Also pull the freshest live reports and merge them into the analysis"),
+    .optional()
+    .describe(
+      "Also pull the freshest live reports and merge them into the analysis. Defaults to on when " +
+        "the server has live capture enabled (the playwright image), off otherwise.",
+    ),
   sampleSize: z
     .number()
     .int()
@@ -111,12 +115,15 @@ export function registerAnalyzeCompatibility(server: McpServer): void {
           gpuContains: args.gpuContains,
           since: args.since,
         });
-        if (args.includeLive) {
+        // Default to merging live reports whenever the server has live capture
+        // enabled (the playwright image); callers can override per-call.
+        const includeLive = args.includeLive ?? config.enableLive;
+        if (includeLive) {
           // Live capture is best-effort: on any failure we log and continue with
           // the DB-only analysis rather than failing the call.
           const { reports: live, error } = await tryFetchLiveReports(appId, 40);
           if (error) logger.warn("includeLive failed, continuing with DB only:", error);
-          if (live.length > 0) reports = [...reports, ...live];
+          if (live.length > 0) reports = dedupeReports([...reports, ...live]);
         }
 
         // GPU vendor isn't a DB column, so classify and filter in memory. (Also

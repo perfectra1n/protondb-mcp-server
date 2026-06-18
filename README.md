@@ -39,6 +39,10 @@ queryable and analyzable by an LLM.
 - **Live capture** — for the freshest reports on a single game, drives a headless
   browser to capture protondb.com's own reports feed (whose file id is an obfuscated
   client-side hash, so we let the site's JS compute it). Best-effort and non-blocking.
+  When live capture is enabled (the playwright image, `PROTONDB_MCP_ENABLE_LIVE=true`),
+  `get_reports` (`source:"auto"`) and `analyze_compatibility` check the live site
+  **automatically** and merge the freshest reports on top of the local DB — no flag
+  needed. The slim image stays DB-only.
 - **Search + details** — resolves a game name → Steam appId via ProtonDB's Algolia
   index (Steam storefront search as fallback) and enriches with Steam store details.
 - **General keyword search** across all report text (notes, title, Proton version, GPU,
@@ -98,7 +102,9 @@ each report carries only the flat fields, so responses stay small.
 
 - `appId` (string) **or** `name` (string)
 - `source` (`auto` | `db` | `live`, default `auto`) — `db` = local bulk-dump DB, `live` =
-  freshest scraped reports, `auto` = db then live fallback when the DB has none
+  freshest scraped reports, `auto` = both when live capture is enabled (the playwright image):
+  freshest live reports are merged on top of the DB and deduped (`source:"merged"`); otherwise
+  DB only
 - `limit` (int, default 50, max 500)
 - `verdict` (`yes` | `no`), `protonVersionContains` (string), `gpuContains` (string),
   `since` (unix epoch seconds)
@@ -122,7 +128,8 @@ need the per-category faults or full hardware info.
 Aggregate a game's reports into patterns, optionally scoped to a slice of the population.
 
 - `appId` (string) **or** `name` (string)
-- `includeLive` (bool, default false) — also merge the freshest live reports
+- `includeLive` (bool) — also merge the freshest live reports; defaults to on when live capture
+  is enabled (the playwright image), off otherwise
 - `sampleSize` (int, default 2000, max 5000) — how many DB reports to aggregate
 - `gpuVendor` (`nvidia` | `amd` | `intel`), `gpuContains` (string),
   `protonVersionContains` (string), `since` (unix epoch seconds) — scope the population
@@ -250,7 +257,10 @@ The repo ships two images:
 
 - **Default** (`Dockerfile`) — slim, DB-only, **fast**. Live capture is disabled
   (`PROTONDB_MCP_ENABLE_LIVE=false`) since there's no browser.
-- **Full** (`Dockerfile.playwright`) — bundles Chromium for live capture. Larger.
+- **Full** (`Dockerfile.playwright`) — bundles Chromium for live capture. Larger. With
+  `PROTONDB_MCP_ENABLE_LIVE=true` (set by this image), `get_reports` (`source:"auto"`) and
+  `analyze_compatibility` automatically check the live site and merge fresh reports on top of
+  the DB; per call you can still force `source:"db"` / `includeLive:false` to opt out.
 
 ```bash
 # Default image via compose (recommended): builds, runs, persists the DB on a volume.

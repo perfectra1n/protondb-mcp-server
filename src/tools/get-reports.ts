@@ -7,6 +7,7 @@ import { withResolvedAppId, textResult } from "./result.js";
 import { ReportSchema, type Report } from "../lib/types.js";
 import { projectAndFit } from "../lib/project.js";
 import { SystemProfileSchema, rankByProfile } from "../lib/profile.js";
+import { dedupeReports } from "../lib/normalize.js";
 import { config } from "../lib/config.js";
 
 const inputSchema = z.object({
@@ -17,7 +18,9 @@ const inputSchema = z.object({
     .default("auto")
     .describe(
       "Where to read reports: 'db' = local bulk-dump DB (rich, includes hardware), " +
-        "'live' = freshest reports scraped from protondb.com, 'auto' = db then live fallback",
+        "'live' = freshest reports scraped from protondb.com, 'auto' = both when the server has " +
+        "live capture enabled (the playwright image) — freshest live reports are merged on top of " +
+        "the DB and deduped; otherwise DB only.",
     ),
   limit: z.number().int().min(1).max(500).default(50).describe("Max reports to return"),
   verdict: z
@@ -69,7 +72,7 @@ const inputSchema = z.object({
 const outputSchema = z.object({
   appId: z.string(),
   name: z.string().nullable(),
-  source: z.enum(["db", "live"]),
+  source: z.enum(["db", "live", "merged"]),
   count: z.number(),
   truncated: z.boolean(),
   /** How many reports were dropped to fit the response byte budget (0 if none). */
@@ -129,8 +132,8 @@ export function registerGetReports(server: McpServer): void {
           since: args.since,
         };
 
-        let reports: Report[] = [];
-        let usedSource: "db" | "live" = "db";
+        let reports: Report[];
+        let usedSource: "db" | "live" | "merged" = "db";
         let note: string | undefined;
 
         // `raw` and the nested blobs are needed up front only when the caller
@@ -140,27 +143,30 @@ export function registerGetReports(server: McpServer): void {
         const db = getDb();
         const dbCount = countReports(db, appId);
 
-        // Live capture never throws here: failures are logged and we continue,
-        // falling back to the DB (for 'auto') or returning an empty, non-error
-        // result with an explanatory note (for explicit 'live').
-        if (args.source === "live" || (args.source === "auto" && dbCount === 0)) {
-          const { reports: live, error } = await tryFetchLiveReports(appId, args.limit);
-          if (live.length > 0 || args.source === "live") {
-            reports = applyInMemoryFilters(live, filters).slice(0, args.limit);
-            usedSource = "live";
-            if (error) note = `Live capture unavailable, returned no reports: ${error}`;
-          } else if (error) {
-            note = `Live fallback failed (${error}); returning local DB results.`;
-          }
-        }
+        const dbReports = (): Report[] =>
+          getReports(db, { appId, limit: args.limit, includeRaw: wantsRaw, ...filters });
 
-        if (usedSource === "db") {
-          reports = getReports(db, {
-            appId,
-            limit: args.limit,
-            includeRaw: wantsRaw,
-            ...filters,
-          });
+        // Live capture never throws here: failures are logged and we continue,
+        // falling back to the DB rather than erroring.
+        if (args.source === "live") {
+          // Explicit live: live only. Return an empty, non-error result with a
+          // note if capture is unavailable.
+          const { reports: live, error } = await tryFetchLiveReports(appId, args.limit);
+          reports = applyInMemoryFilters(live, filters).slice(0, args.limit);
+          usedSource = "live";
+          if (error) note = `Live capture unavailable, returned no reports: ${error}`;
+        } else if (args.source === "auto" && config.enableLive) {
+          // Auto on the playwright image: merge the freshest live reports on top
+          // of the rich DB reports, deduped, capped at limit.
+          const { reports: live, error } = await tryFetchLiveReports(appId, args.limit);
+          const liveFiltered = applyInMemoryFilters(live, filters);
+          const fromDb = dbReports();
+          reports = dedupeReports([...liveFiltered, ...fromDb]).slice(0, args.limit);
+          usedSource = liveFiltered.length > 0 ? (fromDb.length > 0 ? "merged" : "live") : "db";
+          if (error) note = `Live capture unavailable (${error}); returning local DB results.`;
+        } else {
+          // Explicit 'db', or 'auto' without live capture (the slim image).
+          reports = dbReports();
         }
 
         // Rank by similarity to the user's setup before projecting/trimming, so
@@ -175,7 +181,7 @@ export function registerGetReports(server: McpServer): void {
         );
 
         const moreInStore =
-          usedSource === "db" ? dbCount > fetchedCount : fetchedCount >= args.limit;
+          usedSource === "live" ? fetchedCount >= args.limit : dbCount > fetchedCount;
         const truncated = moreInStore || dropped > 0;
         if (dropped > 0) {
           const hint =

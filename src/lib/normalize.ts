@@ -117,3 +117,28 @@ export function gpuVendor(gpu: string | null | undefined): string {
   if (g.includes("intel") || g.includes("arc") || g.includes("iris")) return "Intel";
   return "other";
 }
+
+/**
+ * Stable-ish identity for a report across the bulk-dump and live sources. Neither
+ * source exposes a server-side id in the flat shape, so key on the fields that
+ * co-vary per report (timestamp + Proton version + a notes prefix).
+ */
+export function reportKey(r: Report): string {
+  return [r.timestamp ?? "", (r.protonVersion ?? "").toLowerCase(), (r.notes ?? "").slice(0, 120)].join(
+    "|",
+  );
+}
+
+/**
+ * Drop duplicate reports, keeping the FIRST occurrence. Callers that merge live
+ * and dump reports pass the live (fresher) copies first so those win.
+ */
+export function dedupeReports(reports: Report[]): Report[] {
+  const seen = new Set<string>();
+  return reports.filter((r) => {
+    const k = reportKey(r);
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { normalizeReport, gpuVendor } from "../src/lib/normalize.js";
+import { normalizeReport, gpuVendor, dedupeReports } from "../src/lib/normalize.js";
+import type { Report } from "../src/lib/types.js";
 
 const dumpRecord = {
   app: { steam: { appId: "352620" }, title: "Porcunipine" },
@@ -108,5 +109,33 @@ describe("gpuVendor", () => {
     expect(gpuVendor("Intel Arc A770")).toBe("Intel");
     expect(gpuVendor(null)).toBe("unknown");
     expect(gpuVendor("Some Weird GPU")).toBe("other");
+  });
+});
+
+describe("dedupeReports", () => {
+  const mk = (over: Partial<Report>): Report => ({
+    appId: "1091500",
+    timestamp: 100,
+    protonVersion: "GE-Proton10-32",
+    notes: "Working OOTB",
+    ...over,
+  });
+
+  it("drops a dump duplicate of a live report, keeping the first (live) copy", () => {
+    const live = mk({ source: "live", playtimeMinutes: 1751 });
+    const dump = mk({ source: "dump", gpu: "AMD RX 6800" });
+    const out = dedupeReports([live, dump]);
+    expect(out).toHaveLength(1);
+    expect(out[0].source).toBe("live");
+  });
+
+  it("keeps reports that differ in timestamp, proton version, or notes", () => {
+    const out = dedupeReports([
+      mk({ timestamp: 1 }),
+      mk({ timestamp: 2 }),
+      mk({ protonVersion: "9.0-3" }),
+      mk({ notes: "different note" }),
+    ]);
+    expect(out).toHaveLength(4);
   });
 });
