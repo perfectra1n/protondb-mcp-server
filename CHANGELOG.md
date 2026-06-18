@@ -1,5 +1,17 @@
 # Changelog
 
+## [2026.6.9](https://github.com/perfectra1n/protondb-mcp-server/compare/v2026.6.8...v2026.6.9) (2026-06-18)
+
+
+### Features
+
+* **reports:** always fetch the live reports by default if env var is set and playwright image is used ([40b017f](https://github.com/perfectra1n/protondb-mcp-server/commit/40b017fa496f4cfc74475a6b51892bbd9b91f88f))
+
+
+### Bug Fixes
+
+* **dev:** yay formatting ([c633c15](https://github.com/perfectra1n/protondb-mcp-server/commit/c633c15e5ad2dce8d1e490b2c72175acf171a6a4))
+
 ## [2026.6.8](https://github.com/perfectra1n/protondb-mcp-server/compare/v2026.6.7...v2026.6.8) (2026-06-17)
 
 
