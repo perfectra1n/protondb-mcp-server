@@ -124,9 +124,11 @@ export function gpuVendor(gpu: string | null | undefined): string {
  * co-vary per report (timestamp + Proton version + a notes prefix).
  */
 export function reportKey(r: Report): string {
-  return [r.timestamp ?? "", (r.protonVersion ?? "").toLowerCase(), (r.notes ?? "").slice(0, 120)].join(
-    "|",
-  );
+  return [
+    r.timestamp ?? "",
+    (r.protonVersion ?? "").toLowerCase(),
+    (r.notes ?? "").slice(0, 120),
+  ].join("|");
 }
 
 /**
